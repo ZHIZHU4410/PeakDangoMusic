@@ -1,0 +1,40 @@
+{
+  "upstream": "https://github.com/Sorihiko/DangoMusic",
+  "commit": "da696d0871fa348323782d7d299ba10df46e07db",
+  "localProfile": {
+    "连接": {
+      "启用漂浮歌词": true
+    },
+    "显示": {
+      "显示汉化歌词": false,
+      "播放方式": 0,
+      "世界字号": 1,
+      "文字亮度": 1,
+      "歌词距离": 10,
+      "左右散布角": 30,
+      "跟随视角": false,
+      "智能防离屏": false,
+      "始终朝向玩家": true,
+      "靠近时后退": true,
+      "保持视线以上": false,
+      "自动拆分合并歌词": true,
+      "允许出现在墙内": true,
+      "位于人物后景": false,
+      "时间偏移毫秒": 0
+    },
+    "动画": {
+      "白色光晕": true,
+      "光晕颜色": 0,
+      "光晕强度": 0.3,
+      "光晕半径": 0.5,
+      "逐字弹出": true,
+      "轻微抖动": true,
+      "抖动频率": 8,
+      "抖动幅度": 0.8,
+      "入场": 3,
+      "退场": 1
+    }
+  },
+  "gameTested": false,
+  "connectionSettingsPreserved": true
+}

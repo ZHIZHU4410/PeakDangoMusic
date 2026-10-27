@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+**/__pycache__/
+*.pyc
+*.user
+.vs/
+.idea/
+.env
+.env.*
+artifacts/
+private/
+backups/
+*.log
+*.cfg
+*.zip
+Config.Build.user.props
