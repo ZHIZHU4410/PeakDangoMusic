@@ -1,13 +1,13 @@
 # PeakDangoMusic · PEAK 悬浮歌词
 
-在 PEAK 中显示与播放器同步的世界悬浮歌词，歌词默认在左右两侧交替出现。
+在 PEAK 主菜单、机场、地图、加载和设置界面持续显示与播放器同步的歌词。游戏中保留左右两侧世界悬浮歌词，打开界面或相机／角色尚未就绪时使用透明的两侧屏幕浮层接续当前歌词。
 
 作者：**布洛芬（ZHIZHU4410 / BLF4410）**。Codex 辅助开发。
 歌词实现改编自 [Sorihiko/DangoMusic](https://github.com/Sorihiko/DangoMusic) 及已有的 DangoMusic Desktop 实现，采用 **GPL-3.0**；来源与改动见 [NOTICE.md](NOTICE.md)。
 
 ## 下载与安装
 
-前往 [Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases) 下载 `PeakDangoMusic-1.1.1-full-installer.zip`。GitHub 自动生成的 Source code ZIP 只有源码，不能直接安装。
+前往 [Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases) 下载 `PeakDangoMusic-1.1.2-full-installer.zip`。GitHub 自动生成的 Source code ZIP 只有源码，不能直接安装。
 
 1. 需要 Windows 10/11 x64、PEAK Windows Mono 版以及 [BepInEx 5 / PEAK 专用加载器](https://thunderstore.io/c/peak/p/BepInEx/BepInExPack_PEAK/)。
 2. 退出 PEAK，将完整安装包解压到普通文件夹，运行“一键安装.cmd”并选择 `PEAK.exe`。
@@ -18,6 +18,7 @@
 ## 功能与连接
 
 - 左右两侧世界歌词、整句／单词／逐字显示、可选翻译、光晕、亮度与动画设置。
+- 主菜单、加载、F9 和其他鼠标界面使用不捕获输入的屏幕浮层，按同一歌曲进度连续显示；播放器暂停时保留当前句。
 - F9 大窗口、分栏滚动、歌词预览及恢复原项目默认设置。
 - 正式游戏场景打开 F9 暂停本机游戏并屏蔽角色操作；关闭后恢复原速度。联机其他玩家与音乐播放器继续运行。
 - **BLF / LX Music**：开启播放器的本机开放 API，默认端口 `23330`，F9 选择相同端口。仅访问 `127.0.0.1` 的状态与歌词接口。
@@ -29,7 +30,7 @@
 
 ## 当前验证范围
 
-当前版本 **1.1.1** 仅完成源码调整和编译，未运行新的游戏或接口测试。新增网易云连接未进行运行测试；多人联机及管理器自动安装未验收。历史 1.1.0 的界面检查不代表当前默认值与侧面位置已经验收。详情见 [VERIFICATION.zh-CN.md](VERIFICATION.zh-CN.md)。
+当前版本 **1.1.2** 修复共用显示层的场景限制，新增全界面歌词接续与状态提示。仅完成源码调整和编译，未运行新的游戏或接口测试。新增网易云连接未进行运行测试；多人联机及管理器自动安装未验收。历史 1.1.0 的界面检查不代表当前默认值与侧面位置已经验收。详情见 [VERIFICATION.zh-CN.md](VERIFICATION.zh-CN.md)。
 
 ## 从源码构建
 
@@ -57,6 +58,6 @@ dotnet publish source/NetEaseBridge/PeakNeteaseBridge.csproj -c Release -r win-x
 
 ## English
 
-PeakDangoMusic is a client-side BepInEx 5 mod that displays synchronized floating lyrics in PEAK. Lyrics alternate between the left and right sides. F9 opens the settings window and pauses local gameplay; F8 toggles lyrics. BLF/LX local APIs are supported. Optional stock NetEase Cloud Music support uses a separate Windows helper and has **not been runtime-tested**.
+PeakDangoMusic is a client-side BepInEx 5 mod that displays synchronized floating lyrics in PEAK. Lyrics alternate between the left and right sides. A non-interactive screen layer continues the same timeline across title, loading and settings screens; pausing the music retains the current line. F9 opens the settings window and pauses local gameplay; F8 toggles lyrics. BLF/LX local APIs are supported. Optional stock NetEase Cloud Music support uses a separate Windows helper and has **not been runtime-tested**.
 
-Download the full installer ZIP from Releases. Install both the plugin DLL and its companion directory. Version 1.1.1 has been compiled, but no new in-game or player API tests were performed. Multiplayer behavior and automatic mod-manager installation remain unverified. GPL-3.0; see LICENSE and NOTICE.md for attribution.
+Download the full installer ZIP from Releases. Install both the plugin DLL and its companion directory. Version 1.1.2 has been compiled, but no new in-game or player API tests were performed. Multiplayer behavior and automatic mod-manager installation remain unverified. GPL-3.0; see LICENSE and NOTICE.md for attribution.

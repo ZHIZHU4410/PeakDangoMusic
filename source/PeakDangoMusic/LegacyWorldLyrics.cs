@@ -41,7 +41,7 @@ internal sealed class LegacyWorldLyrics : IDisposable
     }
     internal void Tick(MusicState state,Camera camera,long now)
     {
-        long? clock=state.PositionAt(now);if(clock==null || !state.Playing || !Ensure()){Hide();return;}
+        long? clock=state.PositionAt(now);if(clock==null || !Ensure()){Hide();return;}
         var timeline=lineView.Get(state.Timeline,settings.SplitLines.Value);
         long position=Math.Clamp(clock.Value+settings.Offset.Value,0,state.DurationMs);int index=timeline.FindIndex(position);
         if(index<0){Hide();return;}

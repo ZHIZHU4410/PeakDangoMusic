@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2 (2026-10-27)
+- Keep the same lyric timeline visible across title, airport, gameplay, loading and settings screens.
+- Use a non-interactive screen overlay while menus are open or the scene camera/character is unavailable.
+- Retain the current lyric while the player is paused; add timeline/line/render diagnostics to F9.
+- Player interfaces and network settings unchanged. Compiled only; no runtime tests.
+
 ## 1.1.1 (2026-10-27)
 - Restore side placement and align supported lyric defaults with Sorihiko/DangoMusic commit da696d0.
 - Scale 1, distance 10, spread 30 degrees; follow/stay-on-screen off, keep-away/face-player on.

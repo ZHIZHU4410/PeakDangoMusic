@@ -1,3 +1,7 @@
+# PeakDangoMusic 1.1.2
+
+Version 1.1.2 removes the gameplay-scene-only lyric gate. A non-interactive screen layer continues the same lyric timeline across menus, loading and settings; ordinary gameplay retains side-positioned world lyrics. Pausing the player retains the current line. Player interfaces and network settings are unchanged. No runtime tests were performed for this revision.
+
 # DangoMusic for PEAK · source and credits
 
 1.1.1 aligns supported lyric defaults with Sorihiko/DangoMusic LyricsModule.kt at commit da696d0871fa348323782d7d299ba10df46e07db. LyricLineView ports its GPL LyricSplit rules, and fallback word reveal timing follows the same source. See SORIHIKO-DEFAULTS.zh-CN.md for the complete mapping and engine-specific differences. At the user's request, placement favors alternating left/right positions within the upstream spread setting. No game or interface tests were run for this revision.

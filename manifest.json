@@ -1,6 +1,6 @@
 {
   "name": "PeakDangoMusic",
-  "version_number": "1.1.1",
+  "version_number": "1.1.2",
   "website_url": "https://github.com/ZHIZHU4410/PeakDangoMusic",
   "description": "PEAK 两侧漂浮歌词，默认参数对齐 Sorihiko，F9 大尺寸设置；支持 BLF/LX 与可选原版网易云（未实测）。作者：布洛芬。",
   "dependencies": [

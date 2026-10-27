@@ -67,7 +67,10 @@ public static class MusicPanel
         GUILayout.Label("播放状态",title);
         Toggle("启用漂浮歌词（F8）",s.Enabled);
         var state=plugin.Client.Snapshot;
-        GUILayout.Label(state.Message,hint);GUILayout.Label(plugin.Renderer.RenderStatus,hint);
+        GUILayout.Label(state.Message,hint);
+        GUILayout.Label("同步歌词："+state.Timeline.Lines.Count+" 行",hint);
+        GUILayout.Label(plugin.LyricDisplayStatus,hint);
+        GUILayout.Label(plugin.TextRenderStatus,hint);
         if(state.Title.Length>0)
         {
             GUILayout.Label(state.Title+" — "+state.Artist);

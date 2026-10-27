@@ -62,7 +62,7 @@ internal sealed class WorldLyrics : IDisposable
     internal void Tick(MusicState state,Camera camera,long now)
     {
         long? clock=state.PositionAt(now);
-        if(clock==null || !state.Playing){Hide();return;}
+        if(clock==null){Hide();return;}
         if(!EnsureFont()){ClearEntries();compatible.Tick(state,camera,now);return;}
         compatible.Hide();
         long position=Math.Clamp(clock.Value+settings.Offset.Value,0,state.DurationMs);
