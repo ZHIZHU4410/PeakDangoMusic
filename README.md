@@ -7,7 +7,7 @@
 
 ## 下载与安装
 
-前往 [Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases) 下载 `PeakDangoMusic-1.1.1-完整安装包.zip`。GitHub 自动生成的 Source code ZIP 只有源码，不能直接安装。
+前往 [Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases) 下载 `PeakDangoMusic-1.1.1-full-installer.zip`。GitHub 自动生成的 Source code ZIP 只有源码，不能直接安装。
 
 1. 需要 Windows 10/11 x64、PEAK Windows Mono 版以及 [BepInEx 5 / PEAK 专用加载器](https://thunderstore.io/c/peak/p/BepInEx/BepInExPack_PEAK/)。
 2. 退出 PEAK，将完整安装包解压到普通文件夹，运行“一键安装.cmd”并选择 `PEAK.exe`。
