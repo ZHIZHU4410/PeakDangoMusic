@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0 (2026-10-28)
+- Add all15 pinned Folia builtin renderers, a local offscreen adapter and world/screen stage display.
+- Add F9 style picker, per-song random choice, stage placement, opacity, size and quality controls.
+- Retain Dango defaults and fallback. Include AGPL corresponding source and runtime notices.
+- Compiled only; user performs runtime tests.
+
 ## 1.1.2 (2026-10-27)
 - Keep the same lyric timeline visible across title, airport, gameplay, loading and settings screens.
 - Use a non-interactive screen overlay while menus are open or the scene camera/character is unavailable.

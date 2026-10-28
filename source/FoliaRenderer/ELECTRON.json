@@ -1,0 +1,7 @@
+{
+  "name": "Electron",
+  "version": "43.7.5",
+  "source": "https://github.com/electron/electron/releases/download/v43.7.5/electron-v43.7.5-win32-x64.zip",
+  "sha256": "7acfa0646793f912ff983c8db8c3a145dc18ee40fe3d11a01840fd59cb76e5a2",
+  "license": "MIT; Chromium and other notices in LICENSES.chromium.html"
+}

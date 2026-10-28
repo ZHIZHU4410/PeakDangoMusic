@@ -18,7 +18,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plugin-dll', type=Path, default=ROOT / 'source/PeakDangoMusic/bin/Release/netstandard2.1/PeakDangoMusic.dll')
     parser.add_argument('--native-exe', type=Path, default=ROOT / 'artifacts/native/PeakNeteaseBridge.exe')
+    parser.add_argument('--folia-dir', type=Path, default=ROOT / 'artifacts/folia')
     args = parser.parse_args()
+    if not (args.folia_dir / 'App/dist/index.html').is_file() or not (args.folia_dir / 'Runtime/PeakFoliaRenderer.exe').is_file():
+        parser.error('Missing Folia renderer output. Run build.ps1 first.')
     for binary in [args.plugin_dll, args.native_exe]:
         if not binary.is_file():
             parser.error('Missing build output: ' + str(binary) + '. Run build.ps1 first.')
@@ -32,10 +35,11 @@ def main():
         native.mkdir(parents=True)
         shutil.copy2(args.plugin_dll, plugins / 'PeakDangoMusic.dll')
         shutil.copy2(args.native_exe, native / 'PeakNeteaseBridge.exe')
+        shutil.copytree(args.folia_dir, plugins / 'PeakDangoMusic/Folia')
         for file in (ROOT / 'packaging/Native').iterdir():
             if file.is_file():
                 shutil.copy2(file, native / file.name)
-        for name in ['LICENSE', 'NOTICE.md', 'README.md', 'CHANGELOG.md', 'SORIHIKO-DEFAULTS.zh-CN.md', 'VERIFICATION.zh-CN.md', 'icon.png', 'manifest.json']:
+        for name in ['LICENSE', 'NOTICE.md', 'FOLIA-LICENSE.txt', 'FOLIA-STYLES.zh-CN.md', 'README.md', 'CHANGELOG.md', 'SORIHIKO-DEFAULTS.zh-CN.md', 'VERIFICATION.zh-CN.md', 'icon.png', 'manifest.json']:
             shutil.copy2(ROOT / name, stage / name)
         shutil.copy2(ROOT / 'packaging/安装说明.md', stage / '安装说明.md')
         for name in ['Install.ps1', 'Start-NetEaseLyrics.ps1']:
@@ -44,7 +48,7 @@ def main():
         for name, script, extra in [('一键安装.cmd', 'Install.ps1', ''), ('卸载歌词.cmd', 'Install.ps1', ' -Uninstall'), ('启动网易云歌词连接.cmd', 'Start-NetEaseLyrics.ps1', '')]:
             command = '@echo off\r\npowershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0' + script + '"' + extra + ' %*\r\nset "result=%ERRORLEVEL%"\r\necho.\r\npause\r\nexit /b %result%\r\n'
             (stage / name).write_bytes(command.encode('ascii'))
-        shutil.copytree(ROOT / 'source', stage / 'source', ignore=shutil.ignore_patterns('bin', 'obj', '__pycache__', '*.pyc', '*.user'))
+        shutil.copytree(ROOT / 'source', stage / 'source', ignore=shutil.ignore_patterns('bin', 'obj', 'node_modules', 'dist', '.cache', 'artifacts', '__pycache__', '*.pyc', '*.user'))
         for folder in ['tools', 'packaging']:
             shutil.copytree(ROOT / folder, stage / folder, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         shutil.copy2(ROOT / 'build.ps1', stage / 'build.ps1')

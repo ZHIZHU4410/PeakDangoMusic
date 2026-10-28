@@ -1,0 +1,107 @@
+[
+  {
+    "id": "sonnet",
+    "order": 10,
+    "labelKey": "ui.visualizerSonnet",
+    "source": "src/components/visualizer/sonnet/entry.tsx",
+    "label": "商籁"
+  },
+  {
+    "id": "tempera",
+    "order": 20,
+    "labelKey": "ui.visualizerTempera",
+    "source": "src/components/visualizer/tempera/entry.tsx",
+    "label": "凝彩"
+  },
+  {
+    "id": "lumiere",
+    "order": 25,
+    "labelKey": "ui.visualizerLumiere",
+    "source": "src/components/visualizer/lumiere/entry.tsx",
+    "label": "绘光"
+  },
+  {
+    "id": "hanabi",
+    "order": 26,
+    "labelKey": "ui.visualizerHanabi",
+    "source": "src/components/visualizer/hanabi/entry.tsx",
+    "label": "花火"
+  },
+  {
+    "id": "classic",
+    "order": 30,
+    "labelKey": "ui.visualizerClassic",
+    "source": "src/components/visualizer/classic/entry.tsx",
+    "label": "流光"
+  },
+  {
+    "id": "cadenza",
+    "order": 40,
+    "labelKey": "ui.visualizerCadenze",
+    "source": "src/components/visualizer/cadenza/entry.tsx",
+    "label": "心象"
+  },
+  {
+    "id": "partita",
+    "order": 50,
+    "labelKey": "ui.visualizerPartita",
+    "source": "src/components/visualizer/partita/entry.tsx",
+    "label": "云阶"
+  },
+  {
+    "id": "fume",
+    "order": 60,
+    "labelKey": "ui.visualizerFume",
+    "source": "src/components/visualizer/fume/entry.tsx",
+    "label": "浮名"
+  },
+  {
+    "id": "tilt",
+    "order": 70,
+    "labelKey": "ui.visualizerTilt",
+    "source": "src/components/visualizer/tilt/entry.tsx",
+    "label": "倾诉"
+  },
+  {
+    "id": "claddagh",
+    "order": 80,
+    "labelKey": "ui.visualizerCladdagh",
+    "source": "src/components/visualizer/claddagh/entry.tsx",
+    "label": "回环"
+  },
+  {
+    "id": "monet",
+    "order": 90,
+    "labelKey": "ui.visualizerMonet",
+    "source": "src/components/visualizer/monet/entry.tsx",
+    "label": "莫奈"
+  },
+  {
+    "id": "pendolo",
+    "order": 100,
+    "labelKey": "ui.visualizerPendolo",
+    "source": "src/components/visualizer/pendolo/entry.tsx",
+    "label": "时计"
+  },
+  {
+    "id": "cappella",
+    "order": 110,
+    "labelKey": "ui.visualizerCappella",
+    "source": "src/components/visualizer/cappella/entry.tsx",
+    "label": "群唱"
+  },
+  {
+    "id": "diorama",
+    "order": 120,
+    "labelKey": "ui.visualizerDiorama",
+    "source": "src/components/visualizer/diorama/entry.tsx",
+    "label": "镜台"
+  },
+  {
+    "id": "still",
+    "order": 130,
+    "labelKey": "ui.visualizerStill",
+    "source": "src/components/visualizer/still/entry.tsx",
+    "label": "静止"
+  }
+]

@@ -1,63 +1,57 @@
 # PeakDangoMusic · PEAK 悬浮歌词
 
-在 PEAK 主菜单、机场、地图、加载和设置界面持续显示与播放器同步的歌词。游戏中保留左右两侧世界悬浮歌词，打开界面或相机／角色尚未就绪时使用透明的两侧屏幕浮层接续当前歌词。
+在PEAK主菜单、机场、地图、加载和F9界面持续显示同步歌词。保留原有Dango两侧悬浮文字，1.2.0新增[Folia](https://github.com/chthollyphile/folia-major)的全部15种内置歌词样式。
 
-作者：**布洛芬（ZHIZHU4410 / BLF4410）**。Codex 辅助开发。
-歌词实现改编自 [Sorihiko/DangoMusic](https://github.com/Sorihiko/DangoMusic) 及已有的 DangoMusic Desktop 实现，采用 **GPL-3.0**；来源与改动见 [NOTICE.md](NOTICE.md)。
+作者：**布洛芬（ZHIZHU4410 / BLF4410）**；Codex辅助开发。Dango来源与Folia原作者署名见[NOTICE.md](NOTICE.md)。
 
-## 下载与安装
+## 下载与使用
 
-前往 [Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases) 下载 `PeakDangoMusic-1.1.2-full-installer.zip`。GitHub 自动生成的 Source code ZIP 只有源码，不能直接安装。
+1. 在[Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases/tag/v1.2.0)下载 **PeakDangoMusic-1.2.0-full-installer.zip**，完整解压。Source code压缩包只有源码，不能直接安装。
+2. 需要Windows x64、PEAK Mono版及BepInEx5。退出PEAK，运行“一键安装.cmd”，选择PEAK.exe；也可按[安装说明](packaging/安装说明.md)手动复制完整DLL和PeakDangoMusic文件夹。
+3. 重开游戏，**F9 → Folia歌词样式**选择；**F8**显隐。原Dango样式仍为默认，已有播放器连接与歌词参数保留。
 
-1. 需要 Windows 10/11 x64、PEAK Windows Mono 版以及 [BepInEx 5 / PEAK 专用加载器](https://thunderstore.io/c/peak/p/BepInEx/BepInExPack_PEAK/)。
-2. 退出 PEAK，将完整安装包解压到普通文件夹，运行“一键安装.cmd”并选择 `PEAK.exe`。
-3. 重开游戏，按 **F9** 打开设置，按 **F8** 显示或隐藏歌词。
+## 歌词样式
 
-手动安装时，将安装包中 `BepInEx/plugins/PeakDangoMusic.dll` 和 `BepInEx/plugins/PeakDangoMusic/` 文件夹一起复制到当前配置的插件目录。无需全能助手或地图模组。
+商籁、凝彩、绘光、花火、流光、心象、云阶、浮名、倾诉、回环、莫奈、时计、群唱、镜台、静止，以及每首随机选择。直接构建上游原React/Pixi/Three渲染器，并非只给旧动画改名。[逐项对应与适配范围](FOLIA-STYLES.zh-CN.md)。
 
-## 功能与连接
+F9提供两侧悬浮、两侧屏幕、全屏舞台；可调舞台大小、透明度、字体倍率、动效强度、画质及帧率。菜单和设置中自动接续显示，音乐暂停时保留当前位置。Folia准备或失败时回退Dango；选回Dango或F8关闭时停止组件。
 
-- 左右两侧世界歌词、整句／单词／逐字显示、可选翻译、光晕、亮度与动画设置。
-- 主菜单、加载、F9 和其他鼠标界面使用不捕获输入的屏幕浮层，按同一歌曲进度连续显示；播放器暂停时保留当前句。
-- F9 大窗口、分栏滚动、歌词预览及恢复原项目默认设置。
-- 正式游戏场景打开 F9 暂停本机游戏并屏蔽角色操作；关闭后恢复原速度。联机其他玩家与音乐播放器继续运行。
-- **BLF / LX Music**：开启播放器的本机开放 API，默认端口 `23330`，F9 选择相同端口。仅访问 `127.0.0.1` 的状态与歌词接口。
-- **可选原版网易云音乐连接（未实测）**：独立 Windows 辅助程序读取媒体会话与可选的本机播放进度，再通过网易云公开 HTTPS 接口获取歌词。不需要 Cookie、账号资料或第三方 API 服务器。
+原播放器没有提供频谱、节拍／人声分析、封面或立绘时不伪造这些输入，相应附加视觉元素可能缺省。原项目的全部设置与第三方Folium模组不在此适配范围。
 
-网易云客户端不提供播放进度时，可先完全退出该客户端，再使用完整包中的“启动网易云歌词连接.cmd”。脚本以本机地址 `127.0.0.1:9223` 开启可选的调试连接；不修改播放器文件。
+## 播放器连接
 
-详细步骤、卸载和排错见 [安装说明](packaging/安装说明.md)。默认值按固定的 Sorihiko 上游提交核对；Unity 字体与材质的适配差异见 [默认值对照](SORIHIKO-DEFAULTS.zh-CN.md)。
+BLF/LX开启本机开放API，默认端口23330。原版网易云使用Windows媒体信息、可选本机进度接口及公开歌词接口；无进度时先完全退出网易云，再用安装包连接脚本启动。插件不需要Cookie或账号资料，不控制播放器、不下载音乐。
 
-## 当前验证范围
+Folia组件仅用于本地离屏渲染，没有独立播放器窗口或键鼠接管。完整包附运行时，用户无需安装Node.js或Electron。首次选择样式会准备资源；默认960×540／24帧，可在F9降低画质减少占用。F9仍暂停本机游戏，其他联机玩家与播放器继续运行。
 
-当前版本 **1.1.2** 修复共用显示层的场景限制，新增全界面歌词接续与状态提示。仅完成源码调整和编译，未运行新的游戏或接口测试。新增网易云连接未进行运行测试；多人联机及管理器自动安装未验收。历史 1.1.0 的界面检查不代表当前默认值与侧面位置已经验收。详情见 [VERIFICATION.zh-CN.md](VERIFICATION.zh-CN.md)。
+## 验证范围
 
-## 从源码构建
+**1.2.0仅完成源码核对、前端生产构建、C#编译和打包校验；按用户要求没有运行游戏、播放器、Folia程序或自动测试。** 新样式画面、显卡兼容性、性能、各场景切换及多人效果由用户验收。历史记录见[VERIFICATION.zh-CN.md](VERIFICATION.zh-CN.md)。
 
-需要 .NET 10 SDK，以及本机已安装 BepInEx 5 的正版 PEAK。仓库不分发游戏、加载器、播放器、字体或音乐文件。
+## 构建
+
+需要.NET10 SDK、Node.js24或更高版本、npm、Python3，以及本机已安装BepInEx5的PEAK。
 
 ```powershell
-.\build.ps1 -GameRoot "你的 PEAK 安装目录"
+.\build.ps1 -GameRoot "你的PEAK安装目录"
 python tools/package.py
 ```
 
-`build.ps1` 构建 Unity 插件和独立的 Windows x64 网易云辅助程序；不会安装模组或启动游戏、播放器。`tools/package.py` 使用 Python 标准库生成 `artifacts/PeakDangoMusic-版本号-完整安装包.zip` 及 SHA-256 校验文件。
+build.ps1编译插件与网易云辅助程序、构建原Folia前端，再下载并核对固定Electron运行时；不会启动游戏、播放器或渲染程序。安装包输出到artifacts目录。
 
-也可以分别构建：
+- source/PeakDangoMusic：BepInEx插件与Dango歌词实现。
+- source/NetEaseBridge：独立原版网易云连接源码。
+- source/FoliaRenderer：AGPL离屏适配、已附上游源码、锁文件和构建工具。
+- packaging：安装脚本、手册及微软组件许可。
 
-```powershell
-dotnet build source/PeakDangoMusic/PeakDangoMusic.csproj -c Release -p:GameRoot="你的 PEAK 安装目录"
-dotnet publish source/NetEaseBridge/PeakNeteaseBridge.csproj -c Release -r win-x64 --self-contained true -o artifacts/native
-```
+## 许可与反馈
 
-目录：`source/PeakDangoMusic` 为 BepInEx 插件；`source/NetEaseBridge` 为可选网易云辅助程序；`packaging` 为安装脚本与运行库许可；`tools` 为本地打包工具。发布包包含完整对应源码。微软运行时及 C#/WinRT 组件遵循各自随附的许可声明。
+Dango插件部分保留GPL-3.0；Folia及适配渲染器采用AGPL-3.0，发行组合依照两许可第13条，完整对应源码和各自许可随包提供。Electron、Chromium及前端依赖遵循随附声明。上游固定提交7a5f975e337e5ba13f55d72b5bc68983bf41c379；原Dango默认值对照见[SORIHIKO-DEFAULTS.zh-CN.md](SORIHIKO-DEFAULTS.zh-CN.md)。
 
-## 反馈
-
-请在 Issues 中附上游戏版本、模组版本、播放器类型和相关日志片段。日志位于当前配置的 `BepInEx/LogOutput.log`；配置为 `BepInEx/config/local.peak.dangomusic.cfg`。提交前移除个人路径、账号及其他私人信息。
+反馈请附模组版本、所选样式、播放器类型、F9状态和相关日志片段。日志位于BepInEx/LogOutput.log，配置为BepInEx/config/local.peak.dangomusic.cfg；提交前移除私人资料。
 
 ## English
 
-PeakDangoMusic is a client-side BepInEx 5 mod that displays synchronized floating lyrics in PEAK. Lyrics alternate between the left and right sides. A non-interactive screen layer continues the same timeline across title, loading and settings screens; pausing the music retains the current line. F9 opens the settings window and pauses local gameplay; F8 toggles lyrics. BLF/LX local APIs are supported. Optional stock NetEase Cloud Music support uses a separate Windows helper and has **not been runtime-tested**.
+PEAK floating lyrics with the original Dango mode plus all15 pinned Folia builtin visualizers. Select them under F9 → Folia styles. Includes side-positioned world/screen stages, fullscreen display, quality controls and complete corresponding source. BLF/LX and optional stock NetEase use the existing read-only timeline. Dango remains the default and fallback. Unavailable audio-analysis/cover input is not synthesized.
 
-Download the full installer ZIP from Releases. Install both the plugin DLL and its companion directory. Version 1.1.2 has been compiled, but no new in-game or player API tests were performed. Multiplayer behavior and automatic mod-manager installation remain unverified. GPL-3.0; see LICENSE and NOTICE.md for attribution.
+Download the full-installer ZIP, not GitHub's generated Source code archives. Version1.2.0 was compiled and packaged only; no runtime tests were performed. Dango components retain GPL-3.0; Folia and the renderer adapter are AGPL-3.0; see the included licenses and NOTICE.md.

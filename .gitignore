@@ -14,3 +14,7 @@ backups/
 *.cfg
 *.zip
 Config.Build.user.props
+**/node_modules/
+**/.cache/
+source/FoliaRenderer/dist/
+source/FoliaRenderer/artifacts/

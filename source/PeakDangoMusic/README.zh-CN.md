@@ -1,4 +1,4 @@
-# PEAK 漂浮歌词 · 完整安装包 1.1.2
+# PEAK 漂浮歌词 · 完整安装包 1.2.0
 
 作者：布洛芬（ZHIZHU4410） · Codex 辅助开发 · 2026-10-27
 
@@ -32,6 +32,10 @@ PEAK/
       PeakNeteaseBridge.exe
       DOTNET-LICENSE.txt
       DOTNET-THIRD-PARTY-NOTICES.txt
+    PeakDangoMusic/Folia/
+      Runtime/PeakFoliaRenderer.exe
+      App/main.cjs
+      App/dist/index.html
 ```
 
 使用模组管理器时，把以上两个项目放入当前配置的 BepInEx/plugins 并从该配置启动；包内脚本只处理手动安装目录。管理器自动安装兼容性未实测。
@@ -46,6 +50,21 @@ PEAK/
 - 世界固定模式保留原项目空间感；可手动开启跟随或智能防离屏。F9显示页有“恢复 Sorihiko 原项目默认”，完整对照见SORIHIKO-DEFAULTS.zh-CN.md。
 - 字色为原项目暖白#F7E1D7，额外亮度默认1。光晕开启、随字色、强度0.3、半径0.5；抖动8Hz/0.8，逐字弹出开启。
 - “动画与效果”页底部的“预览8秒并返回游戏”会关闭设置，让你直接观察效果。
+
+## Folia全部15种歌词样式
+
+F9右侧切换“Folia歌词样式”，可选商籁、凝彩、绘光、花火、流光、心象、云阶、浮名、倾诉、回环、莫奈、时计、群唱、镜台、静止，以及每首随机。Dango原样式仍为默认；播放器连接及已有显示参数保留。
+
+- “两侧悬浮”在游戏中显示舞台，菜单、加载与F9中接续为屏幕舞台；也可选始终两侧屏幕或全屏。F8可隐藏。
+- 设置舞台大小、透明度、字体倍率和动效强度；默认960×540／24帧，可降低画质或帧率减少占用。
+- 初次选择会准备原渲染器，期间保留Dango歌词。失败时F9会提示原因，可点“重新准备Folia样式”，显卡问题可尝试“兼容渲染”。
+- 原播放器没有提供频谱、节拍分析、封面或立绘时，对应的附加视觉元素可能缺省；不伪造这些输入。原样式的歌词时间驱动动画照常使用。
+- 新组件是独立本地渲染程序，完整包附带所需运行时，因此包体比旧版更大。无需安装Node.js或Electron，且不出现独立播放器窗口。
+- 必须完整安装`PeakDangoMusic`文件夹，不能只复制DLL。选回Dango后停止Folia组件。
+
+完整样式对照、上游提交及适配范围见FOLIA-STYLES.zh-CN.md。Folia组件采用AGPL-3.0，源码在source/FoliaRenderer；相关许可和原作者署名随包保留。
+
+本版按用户要求只做编译与打包，未启动游戏、播放器或Folia渲染组件测试；显示效果与性能由用户验收。
 
 ## BLF / LX 连接
 
@@ -70,7 +89,7 @@ PEAK/
 
 | 现象 | 处理 |
 |---|---|
-| F9无反应 | 重开游戏，确认日志加载 PeakDangoMusic 1.1.2，检查实际配置目录和重复DLL。 |
+| F9无反应 | 重开游戏，确认日志加载 PeakDangoMusic 1.2.0，检查实际配置目录和重复DLL。 |
 | 左侧显示未连接 | BLF/LX 开启开放 API；网易云选对来源，必要时用本包连接脚本启动。 |
 | 缺少网易云组件 | 完整安装 DLL 和 PeakDangoMusic 文件夹，不要只更新 DLL。 |
 | 有曲名无歌词 | F9 查看同步歌词行数、当前歌词和渲染方式；主菜单与机场也能显示。检查F8、播放器进度及是否已到第一句。 |
@@ -88,7 +107,7 @@ PEAK/
 
 ## 下载与源码
 
-[GitHub Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases) 提供完整安装包；仓库提供完整源码。请选择 full-installer.zip 安装，自动生成的 Source code ZIP 不能直接安装。
+[GitHub Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases) 提供完整包与校验文件。请下载 full-installer.zip，GitHub的Source code ZIP只含源码。
 
 ## 许可、来源与构建
 

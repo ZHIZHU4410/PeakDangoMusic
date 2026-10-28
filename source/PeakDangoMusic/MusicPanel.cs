@@ -13,7 +13,7 @@ public static class MusicPanel
     static Vector2 connectionScroll,settingsScroll,narrowScroll;
     static int settingsTab;
     static readonly string[] Modes={"整句","单词","逐字"};
-    static readonly string[] Tabs={"歌词显示与位置","动画与效果"};
+    static readonly string[] Tabs={"歌词显示与位置","动画与效果","Folia歌词样式"};
     static readonly string[] Sources={"BLF / LX","原版网易云"};
     static readonly string[] Entrance={"淡入","上浮","弹入","直接"},Exit={"淡出","上浮","缩小","直接"};
     static void Styles()
@@ -30,7 +30,7 @@ public static class MusicPanel
         Styles();
         GUILayout.Label("DangoMusic · 地图漂浮歌词",title);
         GUILayout.Label("F9 打开独立设置并暂停本机游戏；关闭后恢复。联机队友继续运行。",hint);
-        Connection(plugin);GUILayout.Space(24);Display(plugin);GUILayout.Space(24);Effects(plugin);
+        Connection(plugin);GUILayout.Space(24);FoliaStyle(plugin);GUILayout.Space(24);Display(plugin);GUILayout.Space(24);Effects(plugin);
     }
     internal static void DrawStandalone(float availableWidth)
     {
@@ -40,7 +40,7 @@ public static class MusicPanel
         {
             narrowScroll=GUILayout.BeginScrollView(narrowScroll,false,false,GUIStyle.none,GUI.skin.verticalScrollbar);
             GUILayout.BeginVertical(GUILayout.Width(Mathf.Max(180,availableWidth-28)));
-            Connection(plugin);GUILayout.Space(24);Display(plugin);GUILayout.Space(24);Effects(plugin);
+            Connection(plugin);GUILayout.Space(24);FoliaStyle(plugin);GUILayout.Space(24);Display(plugin);GUILayout.Space(24);Effects(plugin);
             GUILayout.EndVertical();GUILayout.EndScrollView();return;
         }
         GUILayout.BeginHorizontal();
@@ -56,7 +56,7 @@ public static class MusicPanel
         GUILayout.Space(16);
         settingsScroll=GUILayout.BeginScrollView(settingsScroll,false,false,GUIStyle.none,GUI.skin.verticalScrollbar);
         GUILayout.BeginVertical(GUILayout.Width(availableWidth*.64f-80));
-        if(settingsTab==0)Display(plugin);else Effects(plugin);
+        if(settingsTab==0)Display(plugin);else if(settingsTab==1)Effects(plugin);else FoliaStyle(plugin);
         GUILayout.EndVertical();GUILayout.EndScrollView();GUILayout.EndVertical();GUILayout.EndHorizontal();
     }
     static void Connection(Plugin plugin)
@@ -117,13 +117,14 @@ public static class MusicPanel
         if(Button("重新加载歌词字体"))plugin.Renderer.RetryFonts();
         if(plugin.Notice.Length>0){GUILayout.Space(12);GUILayout.Label(plugin.Notice,hint);}
         GUILayout.Space(24);GUILayout.Label("使用提示",title);
-        GUILayout.Label("同步歌词在正式地图显示；自带预览也可在机场观察。音乐由播放器独立播放，不随窗口暂停。联机队友继续运行。",hint);
+        GUILayout.Label("主菜单、机场、地图和设置界面均可接续显示歌词。音乐由播放器独立播放，不随窗口暂停。联机队友继续运行。",hint);
     }
     static void Display(Plugin plugin)
     {
         var s=plugin.Settings;
         GUILayout.Label("歌词显示",title);GUILayout.Space(8);
         s.Mode.Value=Selection(s.Mode.Value,Modes);
+        if(s.Style.Value!="dango")GUILayout.Label("当前为Folia样式，自带逐词排版；上方三种播放方式用于Dango样式。",hint);
         GUILayout.Space(16);
         if(Button("恢复 Sorihiko 原项目默认")){s.ApplyOriginalDefaults();plugin.Notice="已恢复原项目歌词默认参数；播放器连接设置保留。";}
         GUILayout.Label("默认在左右两侧生成，固定世界位置；缩放1、距离10、散布30°。",hint);
@@ -164,6 +165,45 @@ public static class MusicPanel
         GUILayout.Space(22);
         if(Button("预览8秒并返回游戏"))plugin.Preview();
         GUILayout.Label("优先使用播放器逐字时间；普通 LRC 按行时长估算。歌词只在本机显示。",hint);
+    }
+    static void FoliaStyle(Plugin plugin)
+    {
+        var s=plugin.Settings;int selected=FoliaStyles.Index(s.Style.Value);
+        GUILayout.Label("歌词显示样式",title);
+        GUILayout.Label("保留Dango原样式，新增Folia全部15种内置样式。选择后自动保存。",hint);
+        GUILayout.Space(12);
+        for(int row=0;row<FoliaStyles.Ids.Length;row+=2)
+        {
+            GUILayout.BeginHorizontal();
+            for(int i=row;i<Math.Min(row+2,FoliaStyles.Ids.Length);i++)
+            {
+                if(i>row)GUILayout.Space(12);
+                if(GUILayout.Toggle(selected==i,FoliaStyles.Labels[i],toggleStyle!,GUILayout.MinWidth(0),GUILayout.ExpandWidth(true),GUILayout.MinHeight(48))&&selected!=i)
+                {s.Style.Value=FoliaStyles.Ids[i];selected=i;}
+            }
+            GUILayout.EndHorizontal();GUILayout.Space(8);
+        }
+        GUILayout.Label(FoliaStyles.Descriptions[selected],hint);GUILayout.Space(16);
+        if(selected==0){GUILayout.Label("Dango沿用当前左右位置、字号、亮度和动画设置。",hint);return;}
+        GUILayout.Label(plugin.TextRenderStatus,hint);
+        if(Button("重新准备Folia样式"))plugin.RestartFolia();
+        GUILayout.Space(16);GUILayout.Label("舞台显示",title);
+        s.FoliaPlacement.Value=Selection(s.FoliaPlacement.Value,new[]{"两侧悬浮","两侧屏幕","全屏舞台"});
+        GUILayout.Label("两侧悬浮在菜单、加载和设置界面自动接续为屏幕舞台。",hint);
+        Slider("舞台大小",s.FoliaSize,.5f,1.8f,"F2");
+        Slider("整体透明度",s.FoliaOpacity,.2f,1,"F2");
+        Slider("Folia字体倍率",s.FoliaFontScale,.5f,2,"F2");
+        Toggle("舞台底色",s.FoliaBackground);
+        GUILayout.Label("动效强度");s.FoliaIntensity.Value=Selection(s.FoliaIntensity.Value,new[]{"轻柔","标准","活泼"});
+        GUILayout.Space(18);GUILayout.Label("画质与性能",title);
+        s.FoliaQuality.Value=Selection(s.FoliaQuality.Value,new[]{"省资源 360p","均衡 540p","清晰 720p"});
+        GUILayout.Label("舞台帧率");int[] fps={15,24,30,60};
+        s.FoliaFps.Value=fps[Selection(Math.Max(0,Array.IndexOf(fps,s.FoliaFps.Value)),new[]{"15","24","30","60"})];
+        Toggle("兼容渲染（显卡渲染失败时开启）",s.FoliaSoftware);
+        GUILayout.Label("原样式使用现有曲目、时间轴和歌词。未提供的音频频谱／节拍／封面不会伪造；相关附加效果以实际输入为准。",hint);
+        GUILayout.Space(16);
+        if(Button("预览20秒并返回游戏"))plugin.Preview(20);
+        GUILayout.Label("F8仍可显隐；切回Dango会停止Folia舞台以释放资源。",hint);
     }
     static bool Button(string label,float width=0)=>width>0?GUILayout.Button(label,GUILayout.Width(width),GUILayout.MinHeight(48)):GUILayout.Button(label,GUILayout.MinHeight(48));
     static int Selection(int selected,string[] labels)

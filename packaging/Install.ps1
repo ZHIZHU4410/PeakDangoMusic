@@ -44,6 +44,9 @@ try {
     $manifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'SHA256.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $rows=@($manifest | Where-Object {$_.path.StartsWith('BepInEx/plugins/',[StringComparison]::Ordinal)})
     if(@($rows | Where-Object {$_.path -eq 'BepInEx/plugins/PeakDangoMusic.dll'}).Count -ne 1 -or @($rows | Where-Object {$_.path -eq 'BepInEx/plugins/PeakDangoMusic/Native/PeakNeteaseBridge.exe'}).Count -ne 1){throw '安装包缺少必要组件。'}
+    foreach($required in @('BepInEx/plugins/PeakDangoMusic/Folia/Runtime/PeakFoliaRenderer.exe','BepInEx/plugins/PeakDangoMusic/Folia/App/dist/index.html')) {
+        if(@($rows | Where-Object {$_.path -eq $required}).Count -ne 1){throw '安装包缺少Folia歌词样式组件，请重新下载完整包。'}
+    }
     foreach($row in $rows) {
         $destination=[IO.Path]::GetFullPath((Join-Path $GameRoot $row.path))
         if($destination -ne $target -and -not $destination.StartsWith($sidecar+'\',[StringComparison]::OrdinalIgnoreCase)){throw '组件目标超出模组目录。'}
