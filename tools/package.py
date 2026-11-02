@@ -27,7 +27,7 @@ def main():
             parser.error('Missing build output: ' + str(binary) + '. Run build.ps1 first.')
     output = ROOT / 'artifacts'
     output.mkdir(exist_ok=True)
-    archive = output / f'PeakDangoMusic-{VERSION}-完整安装包.zip'
+    archive = output / f'PeakDangoMusic-{VERSION}-complete.zip'
     with tempfile.TemporaryDirectory(prefix='package-', dir=output) as temporary:
         stage = Path(temporary)
         plugins = stage / 'BepInEx/plugins'
