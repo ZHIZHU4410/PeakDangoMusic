@@ -8,6 +8,7 @@
 .env
 .env.*
 artifacts/
+promo-*/
 private/
 backups/
 *.log

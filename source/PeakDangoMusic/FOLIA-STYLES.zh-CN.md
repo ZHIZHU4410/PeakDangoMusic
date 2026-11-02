@@ -1,4 +1,4 @@
-# Folia歌词样式对照 · 1.2.0
+# Folia歌词样式对照 · 1.2.2
 
 上游：https://github.com/chthollyphile/folia-major
 固定提交：`7a5f975e337e5ba13f55d72b5bc68983bf41c379`（0.7.23）。以下15种与上游内置清单逐项对应，直接构建原React/Pixi/Three渲染器。
@@ -32,3 +32,9 @@ F9 → Folia歌词样式：保留Dango默认项，新增15种原样式和按曲�
 Folia与适配渲染器采用AGPL-3.0；Dango插件部分保留GPL-3.0，发行组合遵循GPLv3／AGPLv3第13条；完整源码、构建锁文件和各自许可随包提供。Electron及Chromium许可随运行时提供。
 
 按用户要求未启动游戏、音乐播放器或Folia渲染进程验收；只完成源码核对、编译与打包。
+
+1.2.1修复样式首帧与切换状态，DLL和渲染App需要一起升级；异常原因见F9及BepInEx/PeakDangoMusic-Folia.log。未做运行测试。
+
+1.2.1根据报错截图取消Folia页面的127.0.0.1 HTTP加载，改为只读取安装包资源的peak-folia安全协议，避免页面加载ERR_FAILED(-2)导致所有预设不可用。无需打开本机端口或更改网络配置。
+
+1.2.2已定位stdin EOF触发退出，改用双向命名管道；获用户授权做隐藏渲染组件诊断，不启动游戏或播放器。此前未运行声明是历史验证范围。

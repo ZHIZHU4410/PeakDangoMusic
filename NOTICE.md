@@ -21,3 +21,7 @@ The helper includes Microsoft .NET runtime and C#/WinRT components. Their licens
 PEAK adaptation by ZHIZHU4410 with Codex assistance. Based on the installed DangoMusic 0.9.1 Dead Cells desktop/world-lyrics mod, originally evolved from Sorihiko's DangoMusic. Adapted GPL-3.0 timeline, Unicode normalization, lyric token/animation and LX lyric parser are in ThirdParty/DangoMusic. Changes: .NET Standard compatibility, Unity/TMP 3D rendering and settings. No Dead Cells binaries or assets are included.
 
 This standalone PeakDangoMusic component uses GPL-3.0; LICENSE and complete buildable source accompany it. The existing PEAK menu retains its own license and discovers the optional settings panel by reflection. System fonts are loaded from Windows and are not bundled. BLF/LX's local API is used read-only, without copying its code, accounts or music resources.
+
+2026-10-29: 1.2.1 separates bridge/preset initialization, tracks per-selection presentation frames and restores Dango on renderer errors, with bounded local diagnostics. No runtime tests, as requested.
+
+2026-10-29: 1.2.2 replaces GUI stdio transport with a private duplex named pipe after reproducing stdin EOF during hidden renderer startup. Hidden component diagnostics authorized; no game/player tests.

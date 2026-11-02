@@ -39,7 +39,7 @@ def main():
         shutil.rmtree(stage)
     shutil.copytree(ROOT/'dist',stage)
     package=json.loads((ROOT/'package.json').read_text(encoding='utf-8'))
-    (app/'package.json').write_text(json.dumps({key:package[key] for key in ['name','version','main','license']},indent=2),encoding='utf-8')
+    (app/'package.json').write_text(json.dumps({**{key:package[key] for key in ['name','version','main','license']},'peakProtocol':3},indent=2),encoding='utf-8')
     notices=[];seen=set()
     for path in sorted((ROOT/'node_modules').rglob('package.json')):
         try:data=json.loads(path.read_text(encoding='utf-8'))

@@ -1,8 +1,14 @@
-# PEAK 漂浮歌词 · 完整安装包 1.2.0
+# PEAK 漂浮歌词 · 完整安装包 1.2.1
 
 作者：布洛芬（ZHIZHU4410） · Codex 辅助开发 · 2026-10-27
 
 在 PEAK 主菜单、机场、地图、加载和设置界面持续显示播放器同步歌词。支持 BLF/LX 和可选的原版网易云音乐连接，整句、单词、逐字、汉化、亮度、动画、左右两侧世界漂浮和世界固定模式。无需全能助手或地图模组。
+
+## 1.2.1 预设修复
+
+修正新样式切换时旧帧被误判为就绪、模块错误导致空白后未回退的问题。样式桥接独立引导，等待所选样式首帧后再显示；启动超时自动重启。请将DLL和Folia文件夹完整升级后重开游戏，F9 → Folia歌词样式选择。
+
+若仍异常，F9左侧显示原因；详细日志位于游戏目录 `BepInEx/PeakDangoMusic-Folia.log`。本次只编译与打包，未启动游戏、播放器或渲染程序测试。
 
 ## 安装要求
 
@@ -105,9 +111,11 @@ F9右侧切换“Folia歌词样式”，可选商籁、凝彩、绘光、花火�
 
 备份位于 BepInEx/PeakDangoMusicBackups/时间编号/。恢复时把 PeakDangoMusic.dll.previous 改名复制回 plugins；如有 PeakDangoMusic.previous 文件夹，也恢复为 plugins/PeakDangoMusic。只保留一份 DLL。配置按需单独恢复。
 
-## 下载与源码
+## 上传到 Thunderstore
 
-[GitHub Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases) 提供完整包与校验文件。请下载 full-installer.zip，GitHub的Source code ZIP只含源码。
+包根目录已附 manifest.json、256×256 icon.png、README.md、CHANGELOG.md、许可证、完整源码及 SHA256 清单。此 ZIP 可作为 PEAK 完整模组下载页的上传文件；没有执行上传。作者展示名“布洛芬”，可使用此前的 Bulofen 团队。分类建议 Client Side、Audio、Quality Of Life、Mods。
+
+页面必须保留“网易云接口未实测”和“多人联机未验收”的说明。安装包不包含 PEAK、BepInEx、播放器、音乐、账号资料、系统字体或测试组件。管理器自动安装尚未实测，页面以手动安装说明为准。
 
 ## 许可、来源与构建
 

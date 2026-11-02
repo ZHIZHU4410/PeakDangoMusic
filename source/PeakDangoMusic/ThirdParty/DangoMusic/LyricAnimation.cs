@@ -16,9 +16,10 @@ public sealed class LyricAnimation
     private readonly int seed;
     public IReadOnlyList<LyricGrapheme> Graphemes { get; }
 
-    public LyricAnimation(LyricsLine line, long nextLineStartMs = 0)
+    public LyricAnimation(LyricsLine line, long nextLineStartMs = 0, bool wholeToken = false)
     {
         if(line==null)throw new ArgumentNullException(nameof(line));
+        line = LyricUnicode.Normalize(line);
         string text = line.Text ?? "";
         lineStartMs = line.StartMs;
         var starts = StringInfo.ParseCombiningCharacters(text);
@@ -35,7 +36,11 @@ public sealed class LyricAnimation
         double duration = nextLineStartMs > line.StartMs ? nextLineStartMs - (double)line.StartMs
             : line.DurationMs > 0 ? line.DurationMs : 5000;
         revealSpanMs = Math.Min(Math.Max(glyphs.Length * 55d, 250), Math.Max(duration, 400) * .6);
-        wordStarts = AlignWordStarts(text, glyphs, line) ?? EstimateWordStarts(glyphs,line.StartMs,duration);
+        long timingEnd = nextLineStartMs > line.StartMs ? nextLineStartMs
+            : (long)Math.Clamp((decimal)line.StartMs + (line.DurationMs > 0 ? line.DurationMs : 5000), long.MinValue, long.MaxValue);
+        if (line.DurationMs > 0) timingEnd = Math.Min(timingEnd, (long)Math.Clamp((decimal)line.StartMs + line.DurationMs, long.MinValue, long.MaxValue));
+        wordStarts = wholeToken ? glyphs.Select(_ => (double)line.StartMs).ToArray()
+            : LyricTokens.TimedGraphemeStarts(line, timingEnd) ?? EstimateWordStarts(glyphs,line.StartMs,duration);
         seed = StableSeed(text);
     }
 
@@ -88,33 +93,6 @@ public sealed class LyricAnimation
         int count=Math.Max(1,group+(pending?1:0));double span=Math.Min(Math.Max(300,duration)*.75,count*330d);
         return groups.Select(index=>start+span*Math.Max(0,index)/count).ToArray();
     }
-    private static double[]? AlignWordStarts(string text, LyricGrapheme[] glyphs, LyricsLine line)
-    {
-        if (line.Words == null || line.Words.Count == 0) return null;
-        var byUtf16 = new double[text.Length];
-        Array.Fill(byUtf16, double.NaN);
-        int cursor = 0;
-        foreach (var word in line.Words)
-        foreach (char c in word.Text ?? "")
-        {
-            if (char.IsWhiteSpace(c)) continue;
-            while (cursor < text.Length && char.IsWhiteSpace(text[cursor])) cursor++;
-            if (cursor >= text.Length || text[cursor] != c) return null;
-            byUtf16[cursor++] = Math.Max(line.StartMs, word.StartMs);
-        }
-        while (cursor < text.Length && char.IsWhiteSpace(text[cursor])) cursor++;
-        if (cursor != text.Length) return null;
-        var times = new double[glyphs.Length];
-        for (int i = 0; i < glyphs.Length; i++)
-        {
-            double at = line.StartMs;
-            for (int j = glyphs[i].SourceStart; j < glyphs[i].SourceStart + glyphs[i].SourceLength; j++)
-                if (!double.IsNaN(byUtf16[j])) at = Math.Max(at, byUtf16[j]);
-            times[i] = at;
-        }
-        return times;
-    }
-
     private static int StableSeed(string text)
     {
         uint hash = 2166136261;

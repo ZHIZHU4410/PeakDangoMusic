@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.0 (2026-11-02)
+- Add local lyric font selection with fallback and refresh controls.
+- Restore sentence-stable character-by-character Dango lyrics and improve timing alignment.
+- Improve F9 settings layout, grouped controls, visual feedback, and darker pressed buttons.
+- Keep Folia's 15 presets and update the bundled renderer adapter.
+- Build and packaging checks are automated; in-game visual validation remains with the user.
+
+## 1.2.2 (2026-10-29)
+- Reproduce Windows GUI stdin EOF closing the renderer during navigation; replace stdio with private duplex named pipe.
+- Confirm 15/15 hidden preset renderers produce nonempty current-revision bitmap frames with sample lyrics.
+- No game or music player launched; game display/performance remains user validation.
+
+## 1.2.1 (2026-10-29)
+- Replace failed loopback HTTP loading with bundled-only secure protocol resources.
+- Separate bridge bootstrap, confirm current preset first frames and reject stale frames.
+- Restore Dango on errors; recover from startup timeout; persist bounded renderer logs.
+- Require paired DLL/App protocol. Build only; user performs runtime tests.
+
+
 ## 1.2.0 (2026-10-28)
 - Add all15 pinned Folia builtin renderers, a local offscreen adapter and world/screen stage display.
 - Add F9 style picker, per-song random choice, stage placement, opacity, size and quality controls.

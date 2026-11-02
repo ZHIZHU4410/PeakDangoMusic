@@ -7,7 +7,7 @@ internal sealed class MusicSettings
     internal readonly ConfigEntry<bool> Enabled,Translation,Glow,Pop,Wiggle,AllowWalls,BehindPlayer,Smart,Follow,FacePlayer,KeepAway,AboveGround,SplitLines;
     internal readonly ConfigEntry<int> Port,Mode,Frequency,Offset,Entrance,Exit,Source,NetEasePort,GlowColor;
     internal readonly ConfigEntry<float> FontSize,Distance,Amount,Brightness,Spread,GlowStrength,GlowRadius;
-    internal readonly ConfigEntry<string> PlayerPath;
+    internal readonly ConfigEntry<string> PlayerPath,FontFolder,FontPath;
     internal readonly ConfigEntry<string> Style;
     internal readonly ConfigEntry<int> FoliaPlacement,FoliaQuality,FoliaFps,FoliaIntensity;
     internal readonly ConfigEntry<float> FoliaSize,FoliaOpacity,FoliaFontScale;
@@ -19,6 +19,8 @@ internal sealed class MusicSettings
         NetEasePort=config.Bind("连接","网易云本机端口",9223,new ConfigDescription("原版网易云可选本机进度连接端口。未公开Windows播放进度时，使用包内脚本启动网易云。",new AcceptableValueRange<int>(1,65535)));
         Port=config.Bind("连接","LX本机端口",23330,new ConfigDescription("BLF / LX 设置→开放 API 的端口，仅连接127.0.0.1。",new AcceptableValueRange<int>(1,65535)));
         PlayerPath=config.Bind("连接","播放器路径","","可选：填写你自己的 BLF/LX exe 路径，仅用于打开播放器按钮；手动打开播放器无需设置。");
+        FontFolder=config.Bind("字体","字体素材目录",@"D:\BaiduNetdiskDownload\字体搭配2.0 by阳春落羽","递归读取本地TTF、OTF、TTC字体，不安装或复制素材。");
+        FontPath=config.Bind("字体","歌词字体文件","","留空使用系统默认；F9字体页选择。缺失字形由系统字体补齐。");
         Style=config.Bind("样式","歌词显示样式","dango",new ConfigDescription("dango保留原有显示；其余为Folia的15种内置样式；random为每首随机。",new AcceptableValueList<string>(FoliaStyles.Ids)));
         FoliaPlacement=config.Bind("样式","Folia舞台位置",0,new ConfigDescription("0游戏内两侧悬浮舞台，界面中自动屏幕接续；1始终两侧屏幕；2全屏舞台。",new AcceptableValueRange<int>(0,2)));
         FoliaQuality=config.Bind("样式","Folia画质",1,new ConfigDescription("0=640x360，1=960x540，2=1280x720。",new AcceptableValueRange<int>(0,2)));
@@ -30,7 +32,7 @@ internal sealed class MusicSettings
         FoliaBackground=config.Bind("样式","Folia舞台底色",false,"显示舞台底色；样式自身的色块、齿轮等装饰仍按原实现绘制。");
         FoliaSoftware=config.Bind("样式","Folia兼容渲染",false,"仅在显卡渲染失败时开启；使用软件图形模式，可能增加CPU占用。");
         Translation=config.Bind("显示","显示汉化歌词",false,"PEAK扩展选项；原项目只显示原文，默认关闭附加翻译。");
-        Mode=config.Bind("显示","播放方式",0,new ConfigDescription("0整句；1单词（中文无词库时按字）；2逐字。",new AcceptableValueRange<int>(0,2)));
+        Mode=config.Bind("显示","播放方式",0,new ConfigDescription("0整句；1单词（中文无词库时按字）；2整句固定位置、逐字显现，下一句才换位置。",new AcceptableValueRange<int>(0,2)));
         FontSize=config.Bind("显示","世界字号",1f,new ConfigDescription("对应原项目Scale：0.5–3，默认1倍；Unity字号根据倍率和距离换算。",new AcceptableValueRange<float>(.5f,3)));
         Brightness=config.Bind("显示","文字亮度",1f,new ConfigDescription("PEAK材质增益，默认1，不额外提高原项目暖白字色亮度。",new AcceptableValueRange<float>(1,6)));
         Distance=config.Bind("显示","歌词距离",10f,new ConfigDescription("对应原项目Distance：3–40，默认10。",new AcceptableValueRange<float>(3,40)));

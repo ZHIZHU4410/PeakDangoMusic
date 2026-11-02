@@ -10,6 +10,7 @@ internal sealed class ScreenLyrics : IDisposable
     readonly LyricLineView lineView=new();
     readonly List<Glyph> glyphs=new();
     Font? font;
+    ScreenFontView? custom;
     GUIStyle? style,translationStyle;
     LyricsLine? line;
     LyricAnimation? animation;
@@ -31,12 +32,13 @@ internal sealed class ScreenLyrics : IDisposable
         {Index=index;Row=row;Text=text;X=x;Width=width;}
     }
     internal ScreenLyrics(MusicSettings settings){this.settings=settings;}
-    internal void Hide(){visible=false;}
+    internal void Hide(){visible=false;custom?.Hide();}
+    internal void RetryFonts(){custom?.Dispose();custom=null;dirty=true;}
     internal void Tick(MusicState state,long now)
     {
         long? clock=state.PositionAt(now);
         if(clock==null){Hide();return;}
-        var timeline=lineView.Get(state.Timeline,settings.SplitLines.Value);
+        var timeline=lineView.Get(state.Timeline,settings.SplitLines.Value && settings.Mode.Value!=2);
         position=Math.Clamp(clock.Value+settings.Offset.Value,0,state.DurationMs);
         int nextIndex=timeline.FindIndex(position);
         if(nextIndex<0){Hide();return;}
@@ -46,7 +48,7 @@ internal sealed class ScreenLyrics : IDisposable
             source=timeline;song=state.Key;generation=state.LyricGeneration;index=nextIndex;mode=settings.Mode.Value;
             line=LyricUnicode.Normalize(timeline.Lines[index]);
             end=index+1<timeline.Lines.Count?timeline.Lines[index+1].StartMs:Math.Min(state.DurationMs,line.StartMs+Math.Max(5000,line.DurationMs));
-            tokens=mode==0?null:new LyricTokens(line,end,mode==2);tokenIndex=-2;serial=index;
+            tokens=mode==1?new LyricTokens(line,end):null;tokenIndex=-2;serial=index;
         }
         if(position>=end || string.IsNullOrWhiteSpace(line!.Text)){Hide();return;}
         LyricsLine selected=line;
@@ -58,7 +60,7 @@ internal sealed class ScreenLyrics : IDisposable
             selected=new LyricsLine(token.StartMs,Math.Max(1,token.EndMs-token.StartMs),token.Text,new[]{new LyricsWord(token.StartMs,token.EndMs-token.StartMs,token.Text)},line.Translation);
         }
         if(changed || nextToken!=tokenIndex || animation==null)
-        {animation=new LyricAnimation(selected,tokens==null?end:selected.StartMs+selected.DurationMs);tokenIndex=nextToken;dirty=true;}
+        {animation=new LyricAnimation(selected,tokens==null?end:selected.StartMs+selected.DurationMs,tokens!=null);tokenIndex=nextToken;dirty=true;}
         visible=true;
     }
     void Layout()
@@ -83,6 +85,7 @@ internal sealed class ScreenLyrics : IDisposable
     internal void Draw()
     {
         if(!visible || animation==null || Event.current.type!=EventType.Repaint)return;
+        if(settings.FontPath.Value.Length>0){custom??=new ScreenFontView(settings);if(custom.Draw(animation,position,serial,line?.Translation??""))return;}else custom?.Hide();
         if(dirty || style==null || layoutWidth!=Screen.width || layoutHeight!=Screen.height || layoutScale!=settings.FontSize.Value)Layout();
         if(style==null)return;
         var oldMatrix=GUI.matrix;var oldColor=GUI.color;int oldDepth=GUI.depth;bool oldEnabled=GUI.enabled;
@@ -93,7 +96,7 @@ internal sealed class ScreenLyrics : IDisposable
             Color color=LyricPlacement.TextColor*Mathf.Min(settings.Brightness.Value,2);color.a=1;
             foreach(var glyph in glyphs)
             {
-                var frame=animation.Sample(glyph.Index,position,Time.realtimeSinceStartup,settings.Pop.Value,settings.Wiggle.Value,settings.Frequency.Value,settings.Amount.Value);
+                var frame=animation.Sample(glyph.Index,position,Time.realtimeSinceStartup,settings.Pop.Value || mode==2,settings.Wiggle.Value,settings.Frequency.Value,settings.Amount.Value);
                 if(frame.Alpha<=0)continue;
                 float x=center-rowWidths[glyph.Row]*.5f+glyph.X+(float)frame.XOffset;
                 float y=top+glyph.Row*height+(float)frame.YOffset;
@@ -120,5 +123,5 @@ internal sealed class ScreenLyrics : IDisposable
         }
         finally{GUI.matrix=oldMatrix;GUI.color=oldColor;GUI.depth=oldDepth;GUI.enabled=oldEnabled;}
     }
-    public void Dispose(){Hide();if(font!=null)UnityEngine.Object.Destroy(font);font=null;style=null;translationStyle=null;}
+    public void Dispose(){Hide();custom?.Dispose();custom=null;if(font!=null)UnityEngine.Object.Destroy(font);font=null;style=null;translationStyle=null;}
 }

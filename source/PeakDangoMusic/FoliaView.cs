@@ -102,7 +102,7 @@ internal sealed class FoliaView : IDisposable
     }
     internal void Draw()
     {
-        if(!overlay||!visible||texture==null||!client.Running||Event.current.type!=EventType.Repaint)return;
+        if(!overlay||!visible||texture==null||!client.Ready||Event.current.type!=EventType.Repaint)return;
         var oldMatrix=GUI.matrix;var oldColor=GUI.color;int oldDepth=GUI.depth;bool oldEnabled=GUI.enabled;
         try
         {

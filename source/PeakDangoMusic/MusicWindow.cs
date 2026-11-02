@@ -22,7 +22,7 @@ internal sealed class MusicWindow : IDisposable
     internal void Toggle()
     {
         if(Open){Close();return;}
-        previousLock=Cursor.lockState;previousVisible=Cursor.visible;previousTimeScale=Time.timeScale;Open=true;KeepCursor();
+        previousLock=Cursor.lockState;previousVisible=Cursor.visible;previousTimeScale=Time.timeScale;Open=true;MusicPanel.ResetEntrance();KeepCursor();
     }
     internal void Close()
     {
@@ -46,26 +46,29 @@ internal sealed class MusicWindow : IDisposable
                 style.font=font;style.fontSize=18;
                 foreach(var state in new[]{style.normal,style.hover,style.active,style.focused,style.onNormal,style.onHover,style.onActive,style.onFocused})state.textColor=Color.white;
             }
-            skin.window.normal.background=Background(new Color(.045f,.065f,.09f,.99f));
+            skin.window.normal.background=Surface(new Color(.045f,.065f,.09f,.99f),36,2);
             skin.window.onNormal.background=skin.window.normal.background;
-            skin.window.border=new RectOffset(0,0,0,0);
-            skin.window.padding=new RectOffset(24,24,20,22);
-            skin.box.normal.background=Background(new Color(.075f,.10f,.135f,1));
-            skin.box.border=new RectOffset(0,0,0,0);skin.box.padding=new RectOffset(18,18,16,16);skin.box.margin=new RectOffset(0,0,0,0);
-            skin.button.normal.background=Background(new Color(.14f,.19f,.25f,1));
-            skin.button.hover.background=Background(new Color(.20f,.29f,.37f,1));
-            skin.button.active.background=Background(new Color(.10f,.38f,.43f,1));
-            skin.button.onNormal.background=skin.button.active.background;
-            skin.button.onHover.background=Background(new Color(.13f,.45f,.49f,1));
+            skin.window.border=new RectOffset(38,38,38,38);
+            skin.window.padding=new RectOffset(20,20,20,20);
+            skin.box.normal.background=Surface(new Color(.075f,.10f,.135f,1),16,2);
+            skin.box.border=new RectOffset(18,18,18,18);skin.box.padding=new RectOffset(12,12,12,12);skin.box.margin=new RectOffset(0,0,0,0);
+            skin.button.normal.background=Surface(new Color(.14f,.19f,.25f,1),8,1);
+            skin.button.hover.background=Surface(new Color(.20f,.29f,.37f,1),8,1);
+            skin.button.active.background=Surface(new Color(.055f,.09f,.12f,1),8,1);
+            skin.button.onNormal.background=Surface(new Color(.10f,.31f,.35f,1),8,1);
+            skin.button.onHover.background=Surface(new Color(.13f,.45f,.49f,1),8,1);
             skin.button.onActive.background=skin.button.active.background;
-            skin.button.border=new RectOffset(0,0,0,0);skin.button.padding=new RectOffset(12,12,10,10);
+            skin.button.border=new RectOffset(10,10,10,10);skin.button.padding=new RectOffset(12,12,10,10);
             skin.button.margin=new RectOffset(0,0,4,4);skin.button.fixedHeight=0;
             skin.label.wordWrap=true;skin.label.margin=new RectOffset(0,0,4,6);
             skin.toggle.padding.top=8;skin.toggle.padding.bottom=8;skin.toggle.margin=new RectOffset(0,0,4,6);
             skin.textField.padding=new RectOffset(10,10,10,10);skin.textField.margin=new RectOffset(0,0,4,4);skin.textField.fixedHeight=0;
             skin.textField.clipping=TextClipping.Clip;
+            skin.textField.normal.background=Surface(new Color(.095f,.135f,.18f,1),8,1);
+            skin.textField.focused.background=Surface(new Color(.12f,.19f,.24f,1),8,1);
+            skin.textField.border=new RectOffset(10,10,10,10);
             skin.horizontalSlider.normal.background=Background(new Color(.025f,.04f,.06f,1));skin.horizontalSlider.border=new RectOffset(0,0,0,0);skin.horizontalSlider.fixedHeight=10;
-            skin.horizontalSliderThumb.normal.background=Background(new Color(.35f,.78f,.79f,1));skin.horizontalSliderThumb.hover.background=skin.horizontalSliderThumb.normal.background;skin.horizontalSliderThumb.active.background=skin.horizontalSliderThumb.normal.background;
+            skin.horizontalSliderThumb.normal.background=Background(new Color(.35f,.78f,.79f,1));skin.horizontalSliderThumb.hover.background=skin.horizontalSliderThumb.normal.background;skin.horizontalSliderThumb.active.background=Background(new Color(.13f,.38f,.42f,1));
             skin.horizontalSliderThumb.border=new RectOffset(0,0,0,0);skin.horizontalSliderThumb.fixedWidth=24;skin.horizontalSliderThumb.fixedHeight=24;
             skin.verticalScrollbar.fixedWidth=18;skin.verticalScrollbar.margin=new RectOffset(10,0,0,0);
             heading=new GUIStyle(skin.label){fontSize=25,fontStyle=FontStyle.Bold};
@@ -88,7 +91,7 @@ internal sealed class MusicWindow : IDisposable
     {
         GUILayout.BeginHorizontal();GUILayout.BeginVertical();
         GUILayout.Label("DangoMusic · 漂浮歌词",heading);
-        GUILayout.Label((Pausing?"本机游戏已暂停":"歌词设置")+"  ·  F8 显隐歌词  ·  设置自动保存  ·  v"+Plugin.Version,subtitle);
+        GUILayout.Label((Pausing?"本机游戏已暂停":"歌词设置")+"  ·  F8 显隐歌词  ·  设置自动保存  ·  v"+Plugin.Version+(MusicPanel.Feedback.Length>0?"  ·  "+MusicPanel.Feedback:""),subtitle);
         GUILayout.EndVertical();
         bool close=GUILayout.Button("返回游戏  ·  F9 / Esc",GUILayout.Width(220),GUILayout.Height(48));
         GUILayout.EndHorizontal();GUILayout.Space(18);
@@ -99,6 +102,26 @@ internal sealed class MusicWindow : IDisposable
     Texture2D Background(Color color)
     {
         var texture=new Texture2D(1,1);texture.SetPixel(0,0,color);texture.Apply();textures.Add(texture);return texture;
+    }
+    Texture2D Surface(Color fill,float radius,float stroke)
+    {
+        const int size=96;
+        var texture=new Texture2D(size,size,TextureFormat.RGBA32,false){filterMode=FilterMode.Bilinear,wrapMode=TextureWrapMode.Clamp};
+        var pixels=new Color[size*size];
+        for(int y=0;y<size;y++)for(int x=0;x<size;x++)
+        {
+            float px=x+.5f,py=y+.5f;
+            float dx=Mathf.Max(Mathf.Abs(px-size*.5f)-(size*.5f-radius-5),0);
+            float dy=Mathf.Max(Mathf.Abs(py-size*.5f)-(size*.5f-radius-5),0);
+            float distance=Mathf.Sqrt(dx*dx+dy*dy)-radius;
+            float coverage=Mathf.Clamp01(.5f-distance);
+            float edge=Mathf.Clamp01((distance+stroke+.5f)/Mathf.Max(1,stroke));
+            float shadow=.20f*Mathf.Exp(-Mathf.Pow(Mathf.Max(0,distance-1)/7,2))+.10f*Mathf.Exp(-Mathf.Pow(Mathf.Max(0,distance-2)/16,2));
+            var border=new Color(.52f,.66f,.73f,1);
+            var inner=Color.Lerp(border,fill,edge);
+            pixels[y*size+x]=new Color(inner.r*coverage,inner.g*coverage,inner.b*coverage,Mathf.Clamp01(fill.a*coverage+shadow*(1-coverage)));
+        }
+        texture.SetPixels(pixels);texture.Apply();textures.Add(texture);return texture;
     }
     public void Dispose()
     {

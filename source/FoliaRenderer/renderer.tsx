@@ -4,17 +4,14 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { motionValue, useMotionValue } from 'framer-motion';
 import './vendor/folia-major/src/i18n/config';
-import { getVisualizerRegistryEntry } from './vendor/folia-major/src/components/visualizer/registry';
-import { applyVisualizerTuning } from './vendor/folia-major/src/components/visualizer/tuningRegistry';
-import { VisualizerBackdropContext } from './vendor/folia-major/src/components/visualizer/VisualizerBackdrop';
 import { DEFAULT_THEME } from './vendor/folia-major/src/services/baseThemes';
 import type { Line, Theme } from './vendor/folia-major/src/types';
-import './vendor/folia-major/src/stores/useMotionSettingsStore';
 import './stage.css';
 
-type Packet={mode:string;key:string;positionMs:number;durationMs:number;playing:boolean;lines?:Line[];title:string;artist:string;translation:boolean;fontScale:number;intensity:string;primary:string;accent:string;background:boolean;visible:boolean;generation:number};
-declare global {interface Window {peakFolia:{subscribe:(callback:(packet:Packet)=>void)=>()=>void;ready:()=>void;report:(text:string)=>void}}}
-const empty:Packet={mode:'classic',key:'',positionMs:0,durationMs:0,playing:false,title:'',artist:'',translation:false,fontScale:1,intensity:'normal',primary:'#F7E1D7',accent:'#69D7D1',background:false,visible:false,generation:0};
+type Packet={fontPath?:string;revision:number;mode:string;key:string;positionMs:number;durationMs:number;playing:boolean;lines?:Line[];title:string;artist:string;translation:boolean;fontScale:number;intensity:string;primary:string;accent:string;background:boolean;visible:boolean;generation:number};
+declare global {interface Window {peakFolia:{subscribe:(callback:(packet:Packet)=>void)=>()=>void;ready:()=>void;presented:(revision:number)=>void;report:(text:string)=>void}}}
+const Preset=React.lazy(()=>import('./presets'));
+const empty:Packet={revision:0,mode:'classic',key:'',positionMs:0,durationMs:0,playing:false,title:'',artist:'',translation:false,fontScale:1,intensity:'normal',primary:'#F7E1D7',accent:'#69D7D1',background:false,visible:false,generation:0};
 class Boundary extends React.Component<React.PropsWithChildren<{reset:string}>,{failed:boolean}> {
   state={failed:false};static getDerivedStateFromError(){return{failed:true}}
   componentDidCatch(error:Error){window.peakFolia.report('样式渲染错误：'+error.message)}
@@ -28,12 +25,25 @@ function Stage(){
   const currentTime=useMotionValue(0);
   const bands=useMemo(()=>({bass:motionValue(0),lowMid:motionValue(0),mid:motionValue(0),vocal:motionValue(0),treble:motionValue(0),spectrum:motionValue(new Uint8Array(0))}),[]);
   const audioPower=useMotionValue(0);
+  const [fontFamily,setFontFamily]=useState('Microsoft YaHei');
+  useEffect(()=>{
+    let cancelled=false,face:FontFace|undefined;
+    setFontFamily('Microsoft YaHei');
+    if(packet.fontPath){
+      const family='PeakLocalFont'+packet.revision;
+      face=new FontFace(family,'url("/selected-font?v='+packet.revision+'")');
+      face.load().then(loaded=>{if(!cancelled){document.fonts.add(loaded);setFontFamily(family)}})
+        .catch(error=>console.warn('Local font fallback: '+error.message));
+    }
+    return()=>{cancelled=true;if(face)document.fonts.delete(face)};
+  },[packet.fontPath,packet.revision]);
   useEffect(()=>{
     const unsubscribe=window.peakFolia.subscribe(next=>{
       if(next.key!==clock.current.key&&next.lines===undefined){timeline.current=[];setLines([])}
       if(Array.isArray(next.lines)){timeline.current=next.lines;setLines(next.lines)}
       clock.current={position:next.positionMs,tick:performance.now(),playing:next.playing,valid:next.visible,duration:next.durationMs,key:next.key};
-      setPacket(previous=>({...next,lines:undefined}));
+      currentTime.set(Math.max(0,next.positionMs)/1000);
+      setPacket({...next,lines:undefined});
     });
     let animation=0;
     const frame=()=>{
@@ -49,20 +59,19 @@ function Stage(){
     animation=requestAnimationFrame(frame);window.peakFolia.ready();
     return()=>{unsubscribe();cancelAnimationFrame(animation)};
   },[currentTime]);
-  const theme:Theme=useMemo(()=>({...DEFAULT_THEME,backgroundColor:'#10171f',primaryColor:packet.primary,accentColor:packet.accent,secondaryColor:'#9AAEBE',fontFamily:'Microsoft YaHei',animationIntensity:packet.intensity as Theme['animationIntensity']}),[packet.primary,packet.accent,packet.intensity]);
-  const entry=getVisualizerRegistryEntry(packet.mode);
-  const props=applyVisualizerTuning(packet.mode,{
+  const theme:Theme=useMemo(()=>({...DEFAULT_THEME,backgroundColor:'#10171f',primaryColor:packet.primary,accentColor:packet.accent,secondaryColor:'#9AAEBE',fontFamily,fontFamilyStack:[fontFamily,'Microsoft YaHei','Arial'],animationIntensity:packet.intensity as Theme['animationIntensity']}),[packet.primary,packet.accent,packet.intensity,fontFamily]);
+  const props={
     currentTime,duration:packet.durationMs/1000,currentLineIndex:index,lines,theme,subtitleTheme:theme,
     audioPower,audioBands:bands,seed:packet.key,songTitle:packet.title,songArtist:packet.artist,
     lyricsFontScale:packet.fontScale,subtitleFontScale:1,showText:true,isDaylight:false,
     isPlayerChromeHidden:true,showSubtitleTranslation:packet.translation,hideTranslationSubtitle:!packet.translation,
     subtitleContentMode:packet.translation?'translation':'none',showHarmonySubtitle:false,
-    paused:!packet.playing,isPreviewMode:true,background:{mode:'common'},
-  },undefined);
+    paused:!packet.playing,isPreviewMode:true,background:{mode:'common',transparent:!packet.background},
+  };
   return <div className="peak-stage" style={{visibility:packet.visible&&lines.length?'visible':'hidden',background:packet.background?'#10171f':'transparent'}}>
-    {packet.visible&&lines.length>0&&<Boundary reset={packet.mode+'|'+packet.key}><VisualizerBackdropContext.Provider value={{pointerArea:null}}>
-      <Suspense fallback={null}>{entry.render(props)}</Suspense>
-    </VisualizerBackdropContext.Provider></Boundary>}
+    {packet.visible&&lines.length>0&&<Boundary key={packet.revision} reset={String(packet.revision)}>
+      <Suspense fallback={null}><Preset mode={packet.mode} revision={packet.revision} props={props}/></Suspense>
+    </Boundary>}
   </div>;
 }
 createRoot(document.getElementById('root')!).render(<Stage/>);

@@ -15,6 +15,7 @@ internal sealed class WorldLyrics : IDisposable
     TMP_FontAsset? font;GameObject? root;Entry? current;
     string renderKey="",songKey="";long previousPosition=-1;float retryAt,retargetAt;int serial;
     bool fontFailed;
+    FontLibrary.Asset? customFont;
     readonly LegacyWorldLyrics compatible;
     readonly LyricLineView lineView=new();
     internal string RenderStatus=>fontFailed?compatible.Status:font!=null?"文字渲染：系统字体 SDF":"文字渲染：等待进入地图及歌曲／预览";
@@ -23,6 +24,7 @@ internal sealed class WorldLyrics : IDisposable
     {
         internal GameObject Root=null!;internal TextMeshPro Main=null!,Translation=null!;
         internal LyricsLine Line=null!;internal LyricAnimation Animation=null!;internal TMP_MeshInfo[] Original=null!;
+        internal long LastPosition;
         internal Vector3 Anchor,Viewport;internal Quaternion Orientation;internal float Born,Retired=-1;internal int[] CharacterToGrapheme=Array.Empty<int>();
     }
     internal WorldLyrics(MusicSettings settings,ManualLogSource log){this.settings=settings;this.log=log;compatible=new LegacyWorldLyrics(settings,log);}
@@ -33,6 +35,11 @@ internal sealed class WorldLyrics : IDisposable
         {
             root=new GameObject("DangoMusic local world lyrics");UnityEngine.Object.DontDestroyOnLoad(root);
             FontEngine.InitializeFontEngine();
+            if(settings.FontPath.Value.Length>0)
+            {
+                try{customFont=new FontLibrary.Asset(settings.FontPath.Value);font=customFont.Main;log.LogInfo("歌词字体："+Path.GetFileNameWithoutExtension(settings.FontPath.Value));return true;}
+                catch(Exception ex){log.LogWarning("自定义字体不可用，使用系统默认："+ex.Message);}
+            }
             foreach(string file in new[]{"msyh.ttc","msyh.ttf","simhei.ttf","simsun.ttc"})
             {
                 var candidate=FileFont(file);
@@ -69,7 +76,7 @@ internal sealed class WorldLyrics : IDisposable
         if(state.Key!=songKey || previousPosition>=0 && Math.Abs(position-previousPosition)>1800)
         {ClearEntries();renderKey="";songKey=state.Key;}
         previousPosition=position;
-        var timeline=lineView.Get(state.Timeline,settings.SplitLines.Value);
+        var timeline=lineView.Get(state.Timeline,settings.SplitLines.Value && settings.Mode.Value!=2);
         int index=timeline.FindIndex(position);
         if(index<0){Hide();return;}
         int mode=settings.Mode.Value;
@@ -77,12 +84,12 @@ internal sealed class WorldLyrics : IDisposable
         {
             cachedKey=state.Key;cachedGeneration=state.LyricGeneration;cachedIndex=index;cachedMode=mode;
             cachedLine=LyricUnicode.Normalize(timeline.Lines[index]);cachedEnd=index+1<timeline.Lines.Count?timeline.Lines[index+1].StartMs:Math.Min(state.DurationMs,cachedLine.StartMs+Math.Max(5000,cachedLine.DurationMs));
-            cachedTokens=mode==0?null:new LyricTokens(cachedLine,cachedEnd,mode==2);
+            cachedTokens=mode==1?new LyricTokens(cachedLine,cachedEnd):null;
         }
         LyricsLine line=cachedLine!;long next=cachedEnd;
         if(position>=next || string.IsNullOrWhiteSpace(line.Text)){Retire();Animate(camera,position);return;}
         int tokenIndex=-1;
-        if(mode!=0)
+        if(mode==1)
         {
             var tokens=cachedTokens!;tokenIndex=tokens.FindIndex(position);
             if(tokenIndex<0){Retire();Animate(camera,position);return;}
@@ -95,7 +102,7 @@ internal sealed class WorldLyrics : IDisposable
         {
             Retire();renderKey=key;retryAt=Time.unscaledTime+.8f;current=Spawn(line,next,camera);
         }
-        else if(current!=null && !settings.Follow.Value && settings.Smart.Value && Time.unscaledTime>=retargetAt && NearEdge(current,camera))
+        else if(mode!=2 && current!=null && !settings.Follow.Value && settings.Smart.Value && Time.unscaledTime>=retargetAt && NearEdge(current,camera))
         {
             Place(current,camera);retargetAt=Time.unscaledTime+.08f;
         }
@@ -107,7 +114,7 @@ internal sealed class WorldLyrics : IDisposable
         string text=Limit(raw.Text,160),translation=settings.Translation.Value?Limit(raw.Translation,160):"";
         // Truncation changes timed text alignment: fall back to line timing for that rare long line.
         var line=text==raw.Text?raw:new LyricsLine(raw.StartMs,raw.DurationMs,text,null,translation);
-        var e=new Entry{Root=new GameObject("DangoMusic lyric"),Line=line,Animation=new LyricAnimation(line,next),Born=Time.unscaledTime};
+        var e=new Entry{Root=new GameObject("DangoMusic lyric"),Line=line,Animation=new LyricAnimation(line,next,settings.Mode.Value==1),Born=Time.unscaledTime};
         e.Root.transform.SetParent(root.transform,false);e.Main=Text(e.Root,"Original",text,settings.WorldFontSize);e.Translation=Text(e.Root,"Translation",translation,settings.WorldFontSize*.72f);
         float width=Mathf.Min(settings.Distance.Value*.6f,6.5f);e.Main.rectTransform.sizeDelta=new Vector2(width,20);e.Translation.rectTransform.sizeDelta=new Vector2(width,20);
         e.Main.ForceMeshUpdate(true,true);e.Translation.ForceMeshUpdate(true,true);
@@ -177,15 +184,16 @@ internal sealed class WorldLyrics : IDisposable
             e.Anchor=LyricPlacement.KeepDistance(e.Anchor,camera,settings);
             e.Root.transform.rotation=settings.FacePlayer.Value?LyricPlacement.Face(e.Anchor,camera):e.Orientation;e.Root.transform.position=e.Anchor+camera.transform.up*y;e.Root.transform.localScale=Vector3.one*scale;
             e.Translation.alpha=alpha;
+            if(e.Retired<0)e.LastPosition=position;
             var info=e.Main.textInfo;
             for(int m=0;m<info.meshInfo.Length && m<e.Original.Length;m++)Array.Copy(e.Original[m].vertices,info.meshInfo[m].vertices,Math.Min(e.Original[m].vertices.Length,info.meshInfo[m].vertices.Length));
             for(int c=0;c<info.characterCount;c++)
             {
                 var ch=info.characterInfo[c];if(!ch.isVisible || c>=e.CharacterToGrapheme.Length)continue;
                 int mesh=ch.materialReferenceIndex,vi=ch.vertexIndex;if(mesh>=e.Original.Length)continue;
-                var frame=e.Animation.Sample(e.CharacterToGrapheme[c],position,time,settings.Pop.Value,settings.Wiggle.Value,settings.Frequency.Value,settings.Amount.Value);
-                if(!settings.Pop.Value && !settings.Wiggle.Value)frame=new LyricGlyphFrame(1,1,0,0,0);
-                float visible=e.Retired>=0?alpha:alpha*(float)frame.Alpha;
+                var frame=e.Animation.Sample(e.CharacterToGrapheme[c],e.Retired>=0?e.LastPosition:position,time,settings.Pop.Value || settings.Mode.Value==2,settings.Wiggle.Value,settings.Frequency.Value,settings.Amount.Value);
+                if(settings.Mode.Value!=2 && !settings.Pop.Value && !settings.Wiggle.Value)frame=new LyricGlyphFrame(1,1,0,0,0);
+                float visible=alpha*(float)frame.Alpha;
                 var original=e.Original[mesh].vertices;var vertices=info.meshInfo[mesh].vertices;var colors=info.meshInfo[mesh].colors32;
                 Vector3 centre=(original[vi]+original[vi+2])*.5f;var rotation=Quaternion.Euler(0,0,(float)(frame.Rotation*180/Math.PI));
                 float pixel=.03f*settings.FontSize.Value*(settings.Distance.Value/6.5f);
@@ -209,5 +217,5 @@ internal sealed class WorldLyrics : IDisposable
         if(e.Translation!=null && e.Translation.fontSharedMaterial!=null)UnityEngine.Object.Destroy(e.Translation.fontSharedMaterial);
         if(e.Root!=null)UnityEngine.Object.Destroy(e.Root);
     }
-    public void Dispose(){ClearEntries();compatible.Dispose();if(root!=null)UnityEngine.Object.Destroy(root);root=null;foreach(var r in resources)if(r!=null)UnityEngine.Object.Destroy(r);resources.Clear();font=null;}
+    public void Dispose(){ClearEntries();customFont?.Dispose();customFont=null;compatible.Dispose();if(root!=null)UnityEngine.Object.Destroy(root);root=null;foreach(var r in resources)if(r!=null)UnityEngine.Object.Destroy(r);resources.Clear();font=null;}
 }

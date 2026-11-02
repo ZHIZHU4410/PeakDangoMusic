@@ -6,9 +6,21 @@
 
 ## 下载与使用
 
-1. 在[Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases/tag/v1.2.0)下载 **PeakDangoMusic-1.2.0-full-installer.zip**，完整解压。Source code压缩包只有源码，不能直接安装。
+1. 在[Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases/latest)下载 **PeakDangoMusic-1.3.0-完整安装包.zip**，完整解压。Source code压缩包只有源码，不能直接安装。
 2. 需要Windows x64、PEAK Mono版及BepInEx5。退出PEAK，运行“一键安装.cmd”，选择PEAK.exe；也可按[安装说明](packaging/安装说明.md)手动复制完整DLL和PeakDangoMusic文件夹。
 3. 重开游戏，**F9 → Folia歌词样式**选择；**F8**显隐。原Dango样式仍为默认，已有播放器连接与歌词参数保留。
+
+## 1.3.0 字体与设置界面
+
+新增本地字体选择；改进F9设置排版、分组、按钮反馈与按下态。修复Dango逐字整句的字序和换位行为，并继续完善Folia样式适配。播放器和游戏内效果请在实际环境验收。
+
+## 1.2.2 通信修复
+
+已实际复现Windows GUI组件stdin立即EOF，导致退出和ERR_FAILED。改用随机双向命名管道，隐藏组件全部15种样式均已返回正确版本的非空帧，并核对了画面。此诊断只用示例歌词，没有启动PEAK或播放器；游戏内位置和性能仍由用户测试。DLL与App需完整更新并重开游戏。
+
+## 历史1.2.1修复
+
+针对ERR_FAILED(-2)取消Folia本机HTTP页面，改用安全专用协议读取安装资源；不再监听端口。修复样式切换旧帧、失败后仍保持就绪和超时不恢复的问题。DLL与App需要一起升级并重开游戏。错误详情写入BepInEx/PeakDangoMusic-Folia.log（128KiB滚动）。只编译打包，运行效果由用户测试。
 
 ## 歌词样式
 
@@ -26,7 +38,7 @@ Folia组件仅用于本地离屏渲染，没有独立播放器窗口或键鼠接
 
 ## 验证范围
 
-**1.2.0仅完成源码核对、前端生产构建、C#编译和打包校验；按用户要求没有运行游戏、播放器、Folia程序或自动测试。** 新样式画面、显卡兼容性、性能、各场景切换及多人效果由用户验收。历史记录见[VERIFICATION.zh-CN.md](VERIFICATION.zh-CN.md)。
+**1.2.2已获授权仅诊断隐藏Folia组件的15种样式；未启动游戏或播放器。** 新样式画面、显卡兼容性、性能、各场景切换及多人效果由用户验收。历史记录见[VERIFICATION.zh-CN.md](VERIFICATION.zh-CN.md)。
 
 ## 构建
 
@@ -54,4 +66,4 @@ Dango插件部分保留GPL-3.0；Folia及适配渲染器采用AGPL-3.0，发行�
 
 PEAK floating lyrics with the original Dango mode plus all15 pinned Folia builtin visualizers. Select them under F9 → Folia styles. Includes side-positioned world/screen stages, fullscreen display, quality controls and complete corresponding source. BLF/LX and optional stock NetEase use the existing read-only timeline. Dango remains the default and fallback. Unavailable audio-analysis/cover input is not synthesized.
 
-Download the full-installer ZIP, not GitHub's generated Source code archives. Version1.2.0 was compiled and packaged only; no runtime tests were performed. Dango components retain GPL-3.0; Folia and the renderer adapter are AGPL-3.0; see the included licenses and NOTICE.md.
+Download the full-installer ZIP, not GitHub's generated Source code archives. Version1.2.1 was compiled and packaged only; no runtime tests were performed. Dango components retain GPL-3.0; Folia and the renderer adapter are AGPL-3.0; see the included licenses and NOTICE.md.

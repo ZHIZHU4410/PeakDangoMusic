@@ -12,9 +12,10 @@ namespace PeakDangoMusic;
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-    internal const string Version="1.2.0";
+    internal const string Version="1.3.0";
     internal static Plugin? Instance {get;private set;}
     internal MusicSettings Settings=null!;
+    internal FontLibrary Fonts=null!;
     internal MusicClient Client=null!;
     internal WorldLyrics Renderer=null!;
     ScreenLyrics screen=null!;
@@ -33,13 +34,13 @@ public sealed class Plugin : BaseUnityPlugin
     internal void RestartFolia()=>folia.Restart();
     void Awake()
     {
-        Instance=this;Config.SaveOnConfigSet=false;Settings=new MusicSettings(Config);Client=new MusicClient(Settings);Renderer=new WorldLyrics(Settings,Logger);screen=new ScreenLyrics(Settings);folia=new FoliaView(Settings);
+        Instance=this;Config.SaveOnConfigSet=false;Settings=new MusicSettings(Config);Fonts=new FontLibrary(Settings.FontFolder.Value);Client=new MusicClient(Settings);Renderer=new WorldLyrics(Settings,Logger);screen=new ScreenLyrics(Settings);folia=new FoliaView(Settings);
         Config.SettingChanged+=Changed;
         window=new MusicWindow();
         harmony=new Harmony("local.peak.dangomusic");harmony.PatchAll(typeof(Plugin).Assembly);
         Logger.LogInfo("DangoMusic: F9 独立设置；F8 显隐。已有全能助手可用 F7→音乐。只读连接 BLF/LX 本机开放 API，默认23330。");
     }
-    void Changed(object sender,SettingChangedEventArgs args){saveAt=Time.unscaledTime+1;Renderer?.Invalidate();folia?.Invalidate();}
+    void Changed(object sender,SettingChangedEventArgs args){saveAt=Time.unscaledTime+1;Renderer?.Invalidate();folia?.Invalidate();if(args.ChangedSetting==Settings.FontPath){Renderer?.RetryFonts();screen?.RetryFonts();}}
     void Update()
     {
         var keyboard=Keyboard.current;

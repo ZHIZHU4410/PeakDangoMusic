@@ -88,8 +88,21 @@ public sealed class LyricTokens
         bool atomic = false;
         foreach (var grapheme in graphemes)
         {
-            if (grapheme.WhiteSpace) { Flush(); continue; }
-            if (characters) { result.Add(new(grapheme.Start, grapheme.End, 1)); continue; }
+            if (grapheme.WhiteSpace) { if (!characters) Flush(); continue; }
+            if (characters)
+            {
+                if (Punctuation(grapheme))
+                {
+                    if (result.Count > 0) result[^1] = result[^1] with { End = grapheme.End };
+                    else if (start < 0) start = grapheme.Start;
+                }
+                else
+                {
+                    result.Add(new(start >= 0 ? start : grapheme.Start, grapheme.End, 1));
+                    start = -1;
+                }
+                continue;
+            }
             var category = CharUnicodeInfo.GetUnicodeCategory(text, grapheme.Start);
             bool punctuation = category is UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation
                 or UnicodeCategory.OpenPunctuation or UnicodeCategory.ClosePunctuation or UnicodeCategory.InitialQuotePunctuation
@@ -151,53 +164,100 @@ public sealed class LyricTokens
         return result;
     }
 
-    private static (long Start, long End)[]? Align(List<Grapheme> graphemes, List<Range> ranges, LyricsLine line, long lineEnd)
+    // One mapping is shared by token selection and whole-line pop animation.
+    // Punctuation is decoration, not an extra sung syllable; co-timed fragments
+    // share their own interval rather than invalidating every timestamp in the line.
+    internal static double[]? TimedGraphemeStarts(LyricsLine line, long lineEnd)
     {
-        if (line.Words == null || line.Words.Count == 0 || ranges.Count == 0) return null;
-        var byGrapheme = new (long Start, long End)[graphemes.Count];
+        var times = AlignGraphemes(Graphemes(line.Text), line, lineEnd);
+        return times?.Select(time => (double)time.Start).ToArray();
+    }
+
+    private static bool Punctuation(Grapheme grapheme) => CharUnicodeInfo.GetUnicodeCategory(grapheme.Text, 0)
+        is UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation
+            or UnicodeCategory.OpenPunctuation or UnicodeCategory.ClosePunctuation
+            or UnicodeCategory.InitialQuotePunctuation or UnicodeCategory.FinalQuotePunctuation
+            or UnicodeCategory.OtherPunctuation;
+
+    private static (long Start, long End)[]? AlignGraphemes(List<Grapheme> graphemes, LyricsLine line, long lineEnd)
+    {
+        if (line.Words == null || line.Words.Count == 0 || lineEnd <= line.StartMs) return null;
+        var groups = new List<(long Start, long End, List<int> Indices)>();
         int cursor = 0;
         long previousStart = long.MinValue;
         foreach (var fragment in line.Words)
         {
-            var visible = Graphemes(fragment.Text ?? "").Where(grapheme => !grapheme.WhiteSpace).ToArray();
-            if (visible.Length == 0) continue;
-            // Some YRC feeds give a final punctuation suffix its own zero-length marker
-            // exactly at line end. It does not invalidate the preceding sung word times.
-            bool closingAtEnd = cursor > 0 && fragment.StartMs == lineEnd && fragment.DurationMs == 0
-                && visible.All(grapheme => CharUnicodeInfo.GetUnicodeCategory(grapheme.Text, 0)
-                    is UnicodeCategory.ClosePunctuation or UnicodeCategory.FinalQuotePunctuation
-                        or UnicodeCategory.OtherPunctuation or UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation);
-            if (fragment.StartMs < previousStart || (fragment.StartMs >= lineEnd && !closingAtEnd) || fragment.DurationMs < 0) return null;
+            var sung = Graphemes(fragment.Text ?? "").Where(g => !g.WhiteSpace && !Punctuation(g)).ToArray();
+            if (sung.Length == 0) continue;
+            if (fragment.StartMs < previousStart || fragment.StartMs >= lineEnd || fragment.DurationMs < 0) return null;
             previousStart = fragment.StartMs;
-            long fragmentStart = Math.Clamp(fragment.StartMs, line.StartMs, lineEnd);
-            long fragmentEnd = Math.Clamp(Add(fragment.StartMs, fragment.DurationMs), fragmentStart, lineEnd);
-            for (int i = 0; i < visible.Length; i++)
+            long start = Math.Clamp(fragment.StartMs, line.StartMs, lineEnd);
+            long end = Math.Clamp(Add(fragment.StartMs, fragment.DurationMs), start, lineEnd);
+            var indices = new List<int>();
+            foreach (var glyph in sung)
             {
-                while (cursor < graphemes.Count && graphemes[cursor].WhiteSpace) cursor++;
-                if (cursor >= graphemes.Count || graphemes[cursor].Text != visible[i].Text) return null;
-                byGrapheme[cursor++] = (Interpolate(fragmentStart, fragmentEnd, i, visible.Length),
-                    Interpolate(fragmentStart, fragmentEnd, i + 1, visible.Length));
+                while (cursor < graphemes.Count && (graphemes[cursor].WhiteSpace || Punctuation(graphemes[cursor]))) cursor++;
+                // Never put another letter's timing on mismatched display text.
+                if (cursor >= graphemes.Count || graphemes[cursor].Text != glyph.Text) return null;
+                indices.Add(cursor++);
+            }
+            if (groups.Count > 0 && groups[^1].Start == start)
+            {
+                var previous = groups[^1];
+                previous.Indices.AddRange(indices);
+                groups[^1] = (start, Math.Max(previous.End, end), previous.Indices);
+            }
+            else groups.Add((start, end, indices));
+        }
+        while (cursor < graphemes.Count && (graphemes[cursor].WhiteSpace || Punctuation(graphemes[cursor]))) cursor++;
+        if (cursor != graphemes.Count || groups.Count == 0) return null;
+        var result = new (long Start, long End)[graphemes.Count];
+        var assigned = new bool[graphemes.Count];
+        for (int i = 0; i < groups.Count; i++)
+        {
+            var group = groups[i];
+            long boundary = i + 1 < groups.Count ? groups[i + 1].Start : lineEnd;
+            long end = group.End > group.Start ? Math.Min(group.End, boundary) : boundary;
+            for (int j = 0; j < group.Indices.Count; j++)
+            {
+                int index = group.Indices[j];
+                result[index] = (Interpolate(group.Start, end, j, group.Indices.Count),
+                    Interpolate(group.Start, end, j + 1, group.Indices.Count));
+                assigned[index] = true;
             }
         }
-        while (cursor < graphemes.Count && graphemes[cursor].WhiteSpace) cursor++;
-        if (cursor != graphemes.Count) return null;
+        var nearby = result[groups[0].Indices[0]];
+        for (int i = 0; i < result.Length; i++)
+        {
+            if (assigned[i]) nearby = result[i];
+            else result[i] = nearby;
+        }
+        return result;
+    }
+
+    private static (long Start, long End)[]? Align(List<Grapheme> graphemes, List<Range> ranges, LyricsLine line, long lineEnd)
+    {
+        if (ranges.Count == 0) return null;
+        var times = AlignGraphemes(graphemes, line, lineEnd);
+        if (times == null) return null;
         var result = new (long Start, long End)[ranges.Count];
-        cursor = 0;
+        int cursor = 0;
         for (int index = 0; index < ranges.Count; index++)
         {
             var range = ranges[index];
             long start = long.MaxValue, end = long.MinValue;
             while (cursor < graphemes.Count && graphemes[cursor].Start < range.End)
             {
-                if (!graphemes[cursor].WhiteSpace && graphemes[cursor].Start >= range.Start)
-                { start = Math.Min(start, byGrapheme[cursor].Start); end = Math.Max(end, byGrapheme[cursor].End); }
+                if (!graphemes[cursor].WhiteSpace && !Punctuation(graphemes[cursor]) && graphemes[cursor].Start >= range.Start)
+                { start = Math.Min(start, times[cursor].Start); end = Math.Max(end, times[cursor].End); }
                 cursor++;
             }
-            // Separate trailing punctuation graphemes can share the zero-length boundary
-            // marker. They never become visible, because FindIndex excludes lineEnd.
-            bool sharedClosingBoundary = index > 0 && start == lineEnd && end == lineEnd
-                && result[index - 1].Start == lineEnd && result[index - 1].End == lineEnd;
-            if (start == long.MaxValue || (index > 0 && start <= result[index - 1].Start && !sharedClosingBoundary)) return null;
+            if (start == long.MaxValue)
+            {
+                int at = graphemes.FindIndex(g => g.Start >= range.Start);
+                (start, end) = at >= 0 ? times[at] : (line.StartMs, line.StartMs);
+            }
+            if (index > 0 && start < result[index - 1].Start) return null;
             result[index] = (start, end);
         }
         return result;

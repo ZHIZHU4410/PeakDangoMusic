@@ -42,14 +42,14 @@ internal sealed class LegacyWorldLyrics : IDisposable
     internal void Tick(MusicState state,Camera camera,long now)
     {
         long? clock=state.PositionAt(now);if(clock==null || !Ensure()){Hide();return;}
-        var timeline=lineView.Get(state.Timeline,settings.SplitLines.Value);
+        var timeline=lineView.Get(state.Timeline,settings.SplitLines.Value && settings.Mode.Value!=2);
         long position=Math.Clamp(clock.Value+settings.Offset.Value,0,state.DurationMs);int index=timeline.FindIndex(position);
         if(index<0){Hide();return;}
         if(cachedSong!=state.Key || generation!=state.LyricGeneration || cachedIndex!=index || mode!=settings.Mode.Value)
         {
             cachedSong=state.Key;generation=state.LyricGeneration;cachedIndex=index;mode=settings.Mode.Value;
             line=LyricUnicode.Normalize(timeline.Lines[index]);end=index+1<timeline.Lines.Count?timeline.Lines[index+1].StartMs:Math.Min(state.DurationMs,line.StartMs+Math.Max(5000,line.DurationMs));
-            tokens=mode==0?null:new LyricTokens(line,end,mode==2);animation=new LyricAnimation(line,end);key="";
+            tokens=mode==1?new LyricTokens(line,end):null;animation=new LyricAnimation(line,end);key="";
         }
         if(position>=end){Hide();return;}
         LyricsLine selected=line!;int token=-1;
@@ -59,8 +59,8 @@ internal sealed class LegacyWorldLyrics : IDisposable
             selected=new LyricsLine(t.StartMs,Math.Max(1,t.EndMs-t.StartMs),t.Text,new[]{new LyricsWord(t.StartMs,t.EndMs-t.StartMs,t.Text)},line!.Translation);
         }
         string next=state.Key+"/"+generation+"/"+index+"/"+mode+"/"+token;
-        if(key!=next){key=next;animation=new LyricAnimation(selected,tokens==null?end:selected.StartMs+selected.DurationMs);lastPaint="";paintAt=0;Place(camera);}
-        if(!settings.Follow.Value && settings.Smart.Value && Time.unscaledTime>=repositionAt)
+        if(key!=next){key=next;animation=new LyricAnimation(selected,tokens==null?end:selected.StartMs+selected.DurationMs,tokens!=null);lastPaint="";paintAt=0;Place(camera);}
+        if(mode!=2 && !settings.Follow.Value && settings.Smart.Value && Time.unscaledTime>=repositionAt)
         {
             var p=camera.WorldToViewportPoint(root!.transform.position);
             if(p.z<1 || p.x<.28f || p.x>.72f || p.y<.32f || p.y>.82f)Place(camera);
@@ -80,8 +80,8 @@ internal sealed class LegacyWorldLyrics : IDisposable
             paintAt=Time.unscaledTime+.05f;var text=new StringBuilder();int columns=0;
             for(int i=0;i<animation!.Graphemes.Count && i<160;i++)
             {
-                var glyph=animation.Graphemes[i];var frame=animation.Sample(i,position,Time.unscaledTime,settings.Pop.Value,settings.Wiggle.Value,settings.Frequency.Value,settings.Amount.Value);
-                float alpha=!settings.Pop.Value && !settings.Wiggle.Value?1:(float)frame.Alpha;int size=Math.Clamp((int)Math.Round(64*frame.Scale),48,110);
+                var glyph=animation.Graphemes[i];var frame=animation.Sample(i,position,Time.unscaledTime,settings.Pop.Value || mode==2,settings.Wiggle.Value,settings.Frequency.Value,settings.Amount.Value);
+                float alpha=mode!=2 && !settings.Pop.Value && !settings.Wiggle.Value?1:(float)frame.Alpha;int size=Math.Clamp((int)Math.Round(64*frame.Scale),48,110);
                 if(columns>=22 && !string.IsNullOrWhiteSpace(glyph.Text)){text.Append('\n');columns=0;}
                 text.Append("<color=#F7E1D7").Append(((int)(Math.Clamp(alpha,0,1)*255)).ToString("X2")).Append("><size=").Append(size).Append('>').Append(Escape(glyph.Text)).Append("</size></color>");
                 columns+=glyph.Text.Any(c=>c>255)?2:1;
