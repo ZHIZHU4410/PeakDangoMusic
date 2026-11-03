@@ -67,3 +67,11 @@ Dango插件部分保留GPL-3.0；Folia及适配渲染器采用AGPL-3.0，发行�
 PEAK floating lyrics with the original Dango mode plus all15 pinned Folia builtin visualizers. Select them under F9 → Folia styles. Includes side-positioned world/screen stages, fullscreen display, quality controls and complete corresponding source. BLF/LX and optional stock NetEase use the existing read-only timeline. Dango remains the default and fallback. Unavailable audio-analysis/cover input is not synthesized.
 
 Download the full-installer ZIP, not GitHub's generated Source code archives. Version1.2.1 was compiled and packaged only; no runtime tests were performed. Dango components retain GPL-3.0; Folia and the renderer adapter are AGPL-3.0; see the included licenses and NOTICE.md.
+
+## 支持作者
+
+如果这个模组对你有帮助，欢迎通过爱发电支持布洛芬，感谢你的鼓励！
+
+<p align="center">
+  <img src="docs/images/afdian-sponsor.jpg" alt="布洛芬4410的爱发电赞助二维码" width="360" />
+</p>
