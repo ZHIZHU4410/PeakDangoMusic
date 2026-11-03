@@ -12,7 +12,7 @@ namespace PeakDangoMusic;
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-    internal const string Version="1.3.0";
+    internal const string Version="1.3.1";
     internal static Plugin? Instance {get;private set;}
     internal MusicSettings Settings=null!;
     internal FontLibrary Fonts=null!;

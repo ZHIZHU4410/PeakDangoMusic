@@ -51,6 +51,8 @@ def main():
         shutil.copytree(ROOT / 'source', stage / 'source', ignore=shutil.ignore_patterns('bin', 'obj', 'node_modules', 'dist', '.cache', 'artifacts', '__pycache__', '*.pyc', '*.user'))
         for folder in ['tools', 'packaging']:
             shutil.copytree(ROOT / folder, stage / folder, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        if (ROOT / 'docs').is_dir():
+            shutil.copytree(ROOT / 'docs', stage / 'docs')
         shutil.copy2(ROOT / 'build.ps1', stage / 'build.ps1')
         inventory = [dict(path=p.relative_to(stage).as_posix(), size=p.stat().st_size, sha256=digest(p)) for p in sorted(stage.rglob('*')) if p.is_file()]
         (stage / 'SHA256.json').write_text(json.dumps(inventory, ensure_ascii=False, indent=2), encoding='utf-8')

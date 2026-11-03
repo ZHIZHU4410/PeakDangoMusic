@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.1 (2026-11-03)
+- Restore the 1.2 flat window, panel and button appearance.
+- Retain staggered entrance, darker pressed feedback and existing lyric/font features.
+- Align equal-width options, row labels, sliders, values and toggle controls.
+- Include README image assets in the complete installer.
+- Build and archive validation only; in-game testing is performed by the user.
+
 ## 1.3.0 (2026-11-02)
 - Add local lyric font selection with fallback and refresh controls.
 - Restore sentence-stable character-by-character Dango lyrics and improve timing alignment.

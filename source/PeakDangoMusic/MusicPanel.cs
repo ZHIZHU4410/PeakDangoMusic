@@ -18,6 +18,7 @@ public static class MusicPanel
     static float feedbackAt=-10;
     static string feedback="";
     static string fontSearch="",fontFolderEdit="";
+    const float RowLabelWidth=144,ValueWidth=96,ControlGap=12;
     static readonly string[] Modes={"整句","单词","逐字（整句）"};
     static readonly string[] Tabs={"歌词显示与位置","动画与效果","Folia歌词样式","字体"};
     static readonly string[] Sources={"BLF / LX","原版网易云"};
@@ -31,15 +32,15 @@ public static class MusicPanel
         styleSkin=GUI.skin;
         hint=new GUIStyle(GUI.skin.label){wordWrap=true,fontSize=14};
         title=new GUIStyle(GUI.skin.label){wordWrap=true,fontStyle=FontStyle.Bold,fontSize=20};
-        rowLabel=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleLeft,wordWrap=true,fontSize=16};
-        valueStyle=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleRight,fontSize=15};
+        rowLabel=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleLeft,wordWrap=true,fontSize=16,margin=new RectOffset()};
+        valueStyle=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleRight,fontSize=15,margin=new RectOffset()};
         numericFont ??= Font.CreateDynamicFontFromOSFont(new[]{"Cascadia Mono","Consolas","Courier New"},16);
         valueStyle.font=numericFont;
         if(pressedTexture!=null)UnityEngine.Object.Destroy(pressedTexture);
         if(selectedTexture!=null)UnityEngine.Object.Destroy(selectedTexture);
         pressedTexture=ButtonSurface(new Color(.055f,.09f,.12f,1));
         selectedTexture=ButtonSurface(new Color(.10f,.31f,.35f,1));
-        buttonStyle=new GUIStyle(GUI.skin.button){border=new RectOffset(10,10,10,10)};
+        buttonStyle=new GUIStyle(GUI.skin.button){border=new RectOffset(),wordWrap=true};
         buttonStyle.active.background=pressedTexture;
         buttonStyle.onActive.background=pressedTexture;
         buttonStyle.active.textColor=Color.white;
@@ -47,7 +48,7 @@ public static class MusicPanel
         presetStyle=new GUIStyle(buttonStyle)
         {
             alignment=TextAnchor.MiddleLeft,wordWrap=false,clipping=TextClipping.Clip,
-            padding=new RectOffset(16,16,10,10),margin=new RectOffset(0,0,0,0),fixedHeight=52
+            padding=new RectOffset(12,12,10,10),margin=new RectOffset(0,0,0,0),fixedHeight=48
         };
         selectedStyle=new GUIStyle(buttonStyle);
         selectedStyle.normal.background=GUI.skin.button.onNormal.background??selectedTexture;
@@ -66,7 +67,7 @@ public static class MusicPanel
         Styles();
         GUILayout.Label("DangoMusic · 地图漂浮歌词",title);
         GUILayout.Label("F9 打开独立设置并暂停本机游戏；关闭后恢复。联机队友继续运行。",hint);
-        DrawGroup(()=>Connection(plugin),0);GUILayout.Space(36);DrawGroup(()=>Fonts(plugin),.07f);GUILayout.Space(36);DrawGroup(()=>FoliaStyle(plugin),.14f);GUILayout.Space(36);DrawGroup(()=>Display(plugin),.21f);GUILayout.Space(36);DrawGroup(()=>Effects(plugin),.28f);
+        DrawGroup(()=>Connection(plugin),0);GUILayout.Space(24);DrawGroup(()=>Fonts(plugin),.07f);GUILayout.Space(24);DrawGroup(()=>FoliaStyle(plugin),.14f);GUILayout.Space(24);DrawGroup(()=>Display(plugin),.21f);GUILayout.Space(24);DrawGroup(()=>Effects(plugin),.28f);
     }
     internal static void DrawStandalone(float availableWidth)
     {
@@ -76,7 +77,7 @@ public static class MusicPanel
         {
             narrowScroll=GUILayout.BeginScrollView(narrowScroll,false,false,GUIStyle.none,GUI.skin.verticalScrollbar);
             GUILayout.BeginVertical(GUILayout.Width(Mathf.Max(180,availableWidth-28)));
-            DrawGroup(()=>Connection(plugin),0);GUILayout.Space(36);DrawGroup(()=>Fonts(plugin),.07f);GUILayout.Space(36);DrawGroup(()=>FoliaStyle(plugin),.14f);GUILayout.Space(36);DrawGroup(()=>Display(plugin),.21f);GUILayout.Space(36);DrawGroup(()=>Effects(plugin),.28f);
+            DrawGroup(()=>Connection(plugin),0);GUILayout.Space(24);DrawGroup(()=>Fonts(plugin),.07f);GUILayout.Space(24);DrawGroup(()=>FoliaStyle(plugin),.14f);GUILayout.Space(24);DrawGroup(()=>Display(plugin),.21f);GUILayout.Space(24);DrawGroup(()=>Effects(plugin),.28f);
             GUILayout.EndVertical();GUILayout.EndScrollView();return;
         }
         GUILayout.BeginHorizontal();
@@ -119,7 +120,7 @@ public static class MusicPanel
             long position=state.PositionAt(MusicClock.Now)??state.PositionMs;
             GUILayout.Label((state.Playing?"播放中  ":"已暂停  ")+TimeText(position)+" / "+TimeText(state.DurationMs),valueStyle);
         }
-        GUILayout.Space(32);SectionTitle("连接设置");
+        GUILayout.Space(24);SectionTitle("连接设置");
         if(s.Source.Value==1)
         {
             GUILayout.Label("读取原版网易云的 Windows 媒体信息与本机播放进度，歌词由网易云公开接口获取。",hint);
@@ -158,7 +159,7 @@ public static class MusicPanel
         GUILayout.Space(14);
         if(Button("重新加载歌词字体"))plugin.Renderer.RetryFonts();
         if(plugin.Notice.Length>0){GUILayout.Space(12);GUILayout.Label(plugin.Notice,hint);}
-        GUILayout.Space(32);SectionTitle("使用提示");
+        GUILayout.Space(24);SectionTitle("使用提示");
         GUILayout.Label("主菜单、机场、地图和设置界面均可接续显示歌词。音乐由播放器独立播放，不随窗口暂停。联机队友继续运行。",hint);
     }
     static void Fonts(Plugin plugin)
@@ -210,13 +211,11 @@ public static class MusicPanel
         Slider("缩放倍率",s.FontSize,.5f,3,"F1");Slider("歌词距离",s.Distance,3,40,"F1");
         Slider("左右散布角",s.Spread,0,60,"F0");
         Toggle("始终朝向玩家",s.FacePlayer);Toggle("靠近时后退",s.KeepAway);Toggle("保持视线以上（默认关）",s.AboveGround);
-        GUILayout.Space(32);SectionTitle("位置与遮挡");
+        GUILayout.Space(24);SectionTitle("位置与遮挡");
         Toggle("允许歌词出现在墙内",s.AllowWalls);Toggle("歌词位于人物后景",s.BehindPlayer);
         GUILayout.Label("后景模式使用场景深度；关闭穿墙时会避开实体岩壁，没有空间就跳过。",hint);
         GUILayout.Space(16);
-        GUILayout.BeginHorizontal();GUILayout.Label("时间偏移",rowLabel,GUILayout.Width(160));
-        s.Offset.Value=(int)(Mathf.Round(GUILayout.HorizontalSlider(s.Offset.Value,-10000,10000,GUILayout.Height(26))/50)*50);
-        GUILayout.Label(s.Offset.Value+" ms",valueStyle,GUILayout.Width(96));GUILayout.EndHorizontal();
+        s.Offset.Value=(int)(Mathf.Round(SliderRow("时间偏移",s.Offset.Value,-10000,10000,s.Offset.Value+" ms")/50)*50);
         GUILayout.Label("正值提前，负值延后。",hint);
     }
     static void Effects(Plugin plugin)
@@ -225,14 +224,12 @@ public static class MusicPanel
         SectionTitle("效果预设");
         int preset=PresetGrid(-1,EffectPresets,true);
         if(preset>=0)s.ApplyPreset(preset);
-        GUILayout.Space(32);SectionTitle("文字动画");
+        GUILayout.Space(24);SectionTitle("文字动画");
         Toggle("白色光晕",s.Glow);Toggle("逐字弹出",s.Pop);Toggle("轻微抖动",s.Wiggle);
         s.GlowColor.Value=NamedSelection("光晕颜色",s.GlowColor.Value,new[]{"随字色","粉色","蓝色","金色"});
         Slider("光晕强度",s.GlowStrength,0,3,"F2");Slider("光晕半径",s.GlowRadius,0,1,"F2");
         GUILayout.Space(12);
-        GUILayout.BeginHorizontal();GUILayout.Label("抖动频率",rowLabel,GUILayout.Width(160));
-        s.Frequency.Value=Mathf.RoundToInt(GUILayout.HorizontalSlider(s.Frequency.Value,4,24,GUILayout.Height(26)));
-        GUILayout.Label(s.Frequency.Value+" Hz",valueStyle,GUILayout.Width(80));GUILayout.EndHorizontal();
+        s.Frequency.Value=Mathf.RoundToInt(SliderRow("抖动频率",s.Frequency.Value,4,24,s.Frequency.Value+" Hz"));
         GUILayout.Space(12);Slider("抖动幅度",s.Amount,0,2,"F2");
         GUILayout.Space(12);s.Entrance.Value=NamedSelection("入场动画",s.Entrance.Value,Entrance);
         GUILayout.Space(14);s.Exit.Value=NamedSelection("退场动画",s.Exit.Value,Exit);
@@ -253,7 +250,7 @@ public static class MusicPanel
         if(selected==0){GUILayout.Label("Dango沿用当前左右位置、字号、亮度和动画设置。",hint);return;}
         GUILayout.Label(plugin.TextRenderStatus,hint);
         if(Button("重新准备Folia样式"))plugin.RestartFolia();
-        GUILayout.Space(32);SectionTitle("舞台显示");
+        GUILayout.Space(24);SectionTitle("舞台显示");
         s.FoliaPlacement.Value=NamedSelection("舞台位置",s.FoliaPlacement.Value,new[]{"两侧悬浮","两侧屏幕","全屏舞台"});
         GUILayout.Label("两侧悬浮在菜单、加载和设置界面自动接续为屏幕舞台。",hint);
         Slider("舞台大小",s.FoliaSize,.5f,1.8f,"F2");
@@ -261,7 +258,7 @@ public static class MusicPanel
         Slider("Folia字体倍率",s.FoliaFontScale,.5f,2,"F2");
         Toggle("舞台底色",s.FoliaBackground);
         s.FoliaIntensity.Value=NamedSelection("动效强度",s.FoliaIntensity.Value,new[]{"轻柔","标准","活泼"});
-        GUILayout.Space(32);SectionTitle("画质与性能");
+        GUILayout.Space(24);SectionTitle("画质与性能");
         s.FoliaQuality.Value=NamedSelection("画质",s.FoliaQuality.Value,new[]{"省资源 360p","均衡 540p","清晰 720p"});
         int[] fps={15,24,30,60};
         s.FoliaFps.Value=fps[NamedSelection("舞台帧率",Math.Max(0,Array.IndexOf(fps,s.FoliaFps.Value)),new[]{"15","24","30","60"})];
@@ -279,40 +276,47 @@ public static class MusicPanel
     }
     static int Selection(int selected,string[] labels)
     {
-        GUILayout.BeginHorizontal();
+        Rect area=GUILayoutUtility.GetRect(GUIContent.none,GUIStyle.none,GUILayout.MinWidth(0),GUILayout.ExpandWidth(true),GUILayout.Height(48));
+        float gap=10,width=Mathf.Max(0,(area.width-gap*(labels.Length-1))/labels.Length);
         for(int i=0;i<labels.Length;i++)
         {
-            if(i>0)GUILayout.Space(10);
-            if(GUILayout.Button(labels[i],selected==i?selectedStyle!:buttonStyle!,GUILayout.MinHeight(48)))
+            if(GUI.Button(new Rect(area.x+i*(width+gap),area.y,width,area.height),labels[i],selected==i?selectedStyle!:buttonStyle!))
             {selected=i;SetFeedback("已选择："+labels[i]);}
         }
-        GUILayout.EndHorizontal();return selected;
+        return selected;
     }
     static int NamedSelection(string label,int selected,string[] labels)
     {
         GUILayout.BeginHorizontal();
-        GUILayout.Label(label,rowLabel,GUILayout.Width(120),GUILayout.MinHeight(48));
+        GUILayout.Label(label,rowLabel,GUILayout.Width(RowLabelWidth),GUILayout.Height(48));
+        GUILayout.Space(ControlGap);
         int result=Selection(selected,labels);
         GUILayout.EndHorizontal();
         return result;
     }
     static void Toggle(string label,ConfigEntry<bool> entry)
     {
-        GUILayout.BeginHorizontal(GUILayout.MinHeight(46));
+        GUILayout.BeginHorizontal(GUILayout.MinHeight(48));
         GUILayout.Label(label,rowLabel,GUILayout.MinWidth(0),GUILayout.ExpandWidth(true));
-        bool value=GUILayout.Toggle(entry.Value,entry.Value?"已开启":"已关闭",buttonStyle!,GUILayout.Width(96),GUILayout.Height(40));
+        bool value=GUILayout.Toggle(entry.Value,entry.Value?"已开启":"已关闭",buttonStyle!,GUILayout.Width(ValueWidth),GUILayout.Height(48));
         GUILayout.EndHorizontal();if(value!=entry.Value){entry.Value=value;SetFeedback(label+(value?"：已开启":"：已关闭"));}
         GUILayout.Space(8);
     }
     static void Slider(string label,ConfigEntry<float> entry,float min,float max,string format)
     {
-        GUILayout.BeginHorizontal(GUILayout.MinHeight(36));
-        GUILayout.Label(label,rowLabel,GUILayout.Width(160));
-        float value=GUILayout.HorizontalSlider(entry.Value,min,max,GUILayout.Height(26));
-        GUILayout.Label(entry.Value.ToString(format),valueStyle,GUILayout.Width(58));
-        GUILayout.EndHorizontal();
+        float value=SliderRow(label,entry.Value,min,max,entry.Value.ToString(format));
         if(Math.Abs(value-entry.Value)>.001f){entry.Value=value;SetFeedback(label+"："+value.ToString(format));}
         GUILayout.Space(16);
+    }
+    static float SliderRow(string label,float value,float min,float max,string display)
+    {
+        Rect area=GUILayoutUtility.GetRect(GUIContent.none,GUIStyle.none,GUILayout.MinWidth(0),GUILayout.ExpandWidth(true),GUILayout.Height(36));
+        float labelWidth=Mathf.Min(RowLabelWidth,area.width*.38f);
+        float valueWidth=Mathf.Min(ValueWidth,area.width*.25f);
+        GUI.Label(new Rect(area.x,area.y,labelWidth,area.height),label,rowLabel!);
+        GUI.Label(new Rect(area.xMax-valueWidth,area.y,valueWidth,area.height),display,valueStyle!);
+        var slider=new Rect(area.x+labelWidth+ControlGap,area.y+(area.height-24)*.5f,Mathf.Max(0,area.width-labelWidth-valueWidth-ControlGap*2),24);
+        return GUI.HorizontalSlider(slider,value,min,max);
     }
     static void SectionTitle(string label)
     {
@@ -344,21 +348,13 @@ public static class MusicPanel
     static void SetFeedback(string message){feedback=message;feedbackAt=Time.unscaledTime;}
     static Texture2D ButtonSurface(Color fill)
     {
-        const int size=32;
-        var texture=new Texture2D(size,size,TextureFormat.RGBA32,false){filterMode=FilterMode.Bilinear,wrapMode=TextureWrapMode.Clamp};
-        var pixels=new Color[size*size];
-        for(int y=0;y<size;y++)for(int x=0;x<size;x++)
-        {
-            float dx=Mathf.Max(Mathf.Abs(x+.5f-size*.5f)-6,0),dy=Mathf.Max(Mathf.Abs(y+.5f-size*.5f)-6,0);
-            float coverage=Mathf.Clamp01(8.5f-Mathf.Sqrt(dx*dx+dy*dy));
-            pixels[y*size+x]=new Color(fill.r,fill.g,fill.b,fill.a*coverage);
-        }
-        texture.SetPixels(pixels);texture.Apply();return texture;
+        var texture=new Texture2D(1,1,TextureFormat.RGBA32,false){wrapMode=TextureWrapMode.Clamp};
+        texture.SetPixel(0,0,fill);texture.Apply();return texture;
     }
     static int PresetGrid(int selected,string[] labels,bool momentary=false)
     {
         const int columns=2;
-        const float columnGap=12,rowGap=8,rowHeight=52;
+        const float columnGap=12,rowGap=8,rowHeight=48;
         int rows=(labels.Length+columns-1)/columns;
         // Reserve the whole grid once: every row shares the same column boundaries,
         // including the final unpaired item, in both standalone and embedded panels.

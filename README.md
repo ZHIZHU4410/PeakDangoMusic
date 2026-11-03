@@ -6,9 +6,13 @@
 
 ## 下载与使用
 
-1. 在[Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases/latest)下载 **PeakDangoMusic-1.3.0-complete.zip**，完整解压。Source code压缩包只有源码，不能直接安装。
+1. 在[Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases/latest)下载 **PeakDangoMusic-1.3.1-complete.zip**，完整解压。Source code压缩包只有源码，不能直接安装。
 2. 需要Windows x64、PEAK Mono版及BepInEx5。退出PEAK，运行“一键安装.cmd”，选择PEAK.exe；也可按[安装说明](packaging/安装说明.md)手动复制完整DLL和PeakDangoMusic文件夹。
 3. 重开游戏，**F9 → Folia歌词样式**选择；**F8**显隐。原Dango样式仍为默认，已有播放器连接与歌词参数保留。
+
+## 1.3.1 界面风格调整
+
+恢复 1.2 的平面窗口、面板和按钮风格，保留错开入场与按下变深反馈；统一选项按钮宽度、标签、滑块和数值列的视觉对齐。保留字体选择与歌词功能。构建和安装包检查通过，游戏内效果由用户测试。
 
 ## 1.3.0 字体与设置界面
 
