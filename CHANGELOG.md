@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2 (2026-11-05)
+- Discover initialized NetEase playback exports by interface shape instead of relying on 3.1.42 module numbers; addresses the moved store observed in a 3.1.43 diagnostic report.
+- Show local page/WebSocket/read failures directly in the F9 playback status.
+- Add a read-only playback-clock fallback for clients that show elapsed and total time in separate nearby elements.
+- Preserve the verified 3.1.42 native-cache path and reject ambiguous or incomplete clocks.
+- Simulated CDP expression checks and builds pass; NetEase 3.1.43 playback still requires verification on that client.
+
 ## 1.3.1 (2026-11-03)
 - Restore the 1.2 flat window, panel and button appearance.
 - Retain staggered entrance, darker pressed feedback and existing lyric/font features.

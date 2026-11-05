@@ -38,8 +38,8 @@ try
         }
         if(playback?.PositionMs!=null && key.Length>0 && timeline.Lines.Count==0 && lyricJob==null && Environment.TickCount64>=retryAt)
             lyricJob=Fetch(playback);
-        string status=playback==null?"等待原版网易云音乐：请打开播放器并播放歌曲":playback.PositionMs==null?
-            "网易云未提供播放进度；请退出播放器后用本包的网易云连接脚本启动":message;
+        string status=playback==null?"等待网易云曲目信息；"+cdp.Status:playback.PositionMs==null?
+            "网易云未提供播放进度；"+cdp.Status:message;
         var packet=new
         {
             connected=playback!=null,key,title=playback?.Title??"",artist=playback?.Artist??"",

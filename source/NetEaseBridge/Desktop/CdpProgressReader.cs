@@ -15,28 +15,28 @@ public sealed class CdpProgressReader : IDisposable
     private readonly CancellationTokenSource lifetime = new();
     private readonly SemaphoreSlim readGate = new(1, 1);
     private int disposed;
+    public string Status { get; private set; } = "等待网易云本机进度接口";
 
     // Fixed playback reads only. The once-per-page webpack capture obtains an existing module cache;
     // it never dispatches actions, subscribes to native events, controls media or reads credentials/storage.
-    // Timer fallback is intentionally structural: one visible leaf with a complete elapsed/total pair,
-    // plus an explicit MediaSession playing/paused state. Ambiguous/missing observations return null.
+    // Timer fallback reads only visible elapsed/total text and an explicit MediaSession state.
+    // Ambiguous/missing observations return null.
     internal const string Expression = """
         (() => {
           if (location.protocol !== 'orpheus:') return null;
-          // NetEase 3.1.42: independently inspected module shapes and pure cached-progress getter.
-          // Read cached exports only; never require arbitrary or uninitialized modules.
+          // Read initialized exports only. Module numbers/export letters change between builds.
+          // Only invoke the known store getter and syntactically pure cached-value getters.
           try {
             if (typeof window.__dangoReadOnlyRequire !== 'function' && Array.isArray(window.webpackJsonp)) {
               window.webpackJsonp.push([[987661],{987661:function(module,exports,require){window.__dangoReadOnlyRequire=require;}},[[987661]]]);
             }
             const r = window.__dangoReadOnlyRequire;
-            const store = r && r.c && r.c[8] && r.c[8].exports.a;
-            const progress = r && r.c && r.c[148] && r.c[148].exports.b;
-            const states = r && r.c && r.c[7] && r.c[7].exports.k;
-            if (store && typeof store.getStore === 'function' && typeof progress === 'function' &&
-                /^\(\)\s*=>\s*[a-zA-Z_$][\w$]*$/.test(Function.prototype.toString.call(progress)) &&
-                states && states.Pause === 1 && states.Playing === 2 && states.Stop === 0) {
-              const p = store.getStore().playing, q = progress();
+            const cache = r && r.c;
+            const pure = f => typeof f === 'function' && /^\(\)\s*=>\s*[a-zA-Z_$][\w$]*$/.test(Function.prototype.toString.call(f));
+            const stateEnum = s => s && s.Pause === 1 && s.Playing === 2 && s.Stop === 0;
+            const read = (store, progress, states) => {
+              if (!store || typeof store.getStore !== 'function' || !pure(progress) || !stateEnum(states)) return null;
+              const root = store.getStore(), p = root && root.playing, q = progress();
               const track = p && p.curPlaying && p.curPlaying.track;
               const songId = Number(p && p.curPlaying && p.curPlaying.resourceId);
               const idMatches = p && q && (p.playId ? String(q.playId) === String(p.playId) :
@@ -47,9 +47,48 @@ public sealed class CdpProgressReader : IDisposable
                   (p.playingState === states.Playing || p.playingState === states.Pause)) {
                 const title = typeof track.name === 'string' ? track.name.slice(0,512) : '';
                 const artist = Array.isArray(track.artists) ? track.artists.map(a => typeof a.name === 'string' ? a.name : '').filter(Boolean).join(' / ').slice(0,512) : '';
-                return {title,artist,songId,source:'native-cache',positionMs:Math.round(q.current*1000),
-                  durationMs:Math.round(p.resourceDuration*1000),playing:p.playingState === states.Playing};
+                if (!title.trim()) return null;
+                return {clock:q,frame:{title,artist,songId,source:'native-cache',positionMs:Math.round(q.current*1000),
+                  durationMs:Math.round(p.resourceDuration*1000),playing:p.playingState === states.Playing}};
               }
+              return null;
+            };
+            if (cache) {
+              let legacy = null;
+              try {
+                const exp = id => cache[id] && cache[id].exports || {};
+                legacy = read(exp(8).a,exp(148).b,exp(7).k);
+              } catch (_) { /* The known 3.1.42 slots may now contain unrelated exports. */ }
+              if (legacy) return legacy.frame;
+              let candidates = window.__dangoPlaybackCandidates;
+              if (!candidates || candidates.cache !== cache || Date.now()-candidates.scannedAt > 10000) {
+                candidates = {cache,scannedAt:Date.now(),stores:[],progress:[],states:[]};
+                const add = (list,value,limit) => { if(list.length<limit && !list.includes(value))list.push(value); };
+                for (const id of Object.keys(cache).slice(0,4096)) {
+                  const exports = cache[id] && cache[id].exports;
+                  if (!exports) continue;
+                  for (const key of Object.keys(exports).slice(0,64)) {
+                    try {
+                      const value = exports[key];
+                      if (value && typeof value.getStore === 'function') add(candidates.stores,value,8);
+                      if (stateEnum(value)) add(candidates.states,value,8);
+                      if (pure(value)) add(candidates.progress,value,96);
+                    } catch (_) { /* Ignore unavailable cached exports. */ }
+                  }
+                }
+                window.__dangoPlaybackCandidates = candidates;
+              }
+              const matches = [];
+              for (const store of candidates.stores) for (const states of candidates.states) for (const progress of candidates.progress) {
+                try {
+                  const match = read(store,progress,states);
+                  if (!match) continue;
+                  // Multiple export aliases of the same cached clock are equivalent.
+                  if (!matches.some(m=>m.clock===match.clock && m.frame.songId===match.frame.songId)) matches.push(match);
+                } catch (_) { /* Not the active playback state/clock pair. */ }
+              }
+              if (matches.length === 1) return matches[0].frame;
+              if (matches.length > 1) return null;
             }
           } catch (_) { /* Unsupported client shape: only standards-based fallbacks remain. */ }
           const session = navigator.mediaSession;
@@ -65,20 +104,32 @@ public sealed class CdpProgressReader : IDisposable
               durationMs:Math.round(a.duration*1000), playing:!a.paused && !a.ended};
           }
           if (audio.length > 1 || !session || !['playing','paused'].includes(session.playbackState)) return null;
-          const clocks = [];
-          const pattern = /^([0-9]{1,3}:[0-5][0-9](?::[0-5][0-9])?)\s*\/\s*([0-9]{1,3}:[0-5][0-9](?::[0-5][0-9])?)$/;
+          if (!identity.title && !identity.documentTitle.includes(' - ')) return null;
+          const clocks = [], separate = [];
+          const clockText = '[0-9]{1,3}:[0-5][0-9](?::[0-5][0-9])?';
+          const pattern = new RegExp('^(' + clockText + ')\\s*\\/\\s*(' + clockText + ')$');
+          const single = new RegExp('^' + clockText + '$');
           const seconds = value => value.split(':').reduce((n,v) => n*60 + Number(v), 0);
           for (const node of Array.from(document.querySelectorAll('span,time')).slice(0,2000)) {
             if (node.childElementCount || !node.getClientRects().length) continue;
             const content = node.textContent || '';
             if (content.length > 40) continue;
-            const match = content.trim().match(pattern);
-            if (!match) continue;
-            const current = seconds(match[1]), total = seconds(match[2]);
-            if (total <= 0 || total > 86400 || current > total) continue;
-            clocks.push({positionMs:current*1000, durationMs:total*1000});
-            if (clocks.length > 1) return null;
+            const value = content.trim(), match = value.match(pattern);
+            if (match) {
+              const current = seconds(match[1]), total = seconds(match[2]);
+              if (total <= 0 || total > 86400 || current > total) continue;
+              clocks.push({positionMs:current*1000, durationMs:total*1000});
+            } else if (single.test(value)) {
+              separate.push({seconds:seconds(value), parent:node.parentElement});
+            }
+            if (clocks.length > 1 || separate.length > 2) return null;
           }
+          const related = separate.length === 2 && separate[0].parent && separate[1].parent &&
+            (separate[0].parent === separate[1].parent ||
+             separate[0].parent.parentElement && separate[0].parent.parentElement === separate[1].parent.parentElement);
+          if (!clocks.length && related && separate[1].seconds > 0 &&
+              separate[1].seconds <= 86400 && separate[0].seconds <= separate[1].seconds)
+            clocks.push({positionMs:separate[0].seconds*1000, durationMs:separate[1].seconds*1000});
           return clocks.length === 1 ? {...identity, ...clocks[0], source:'timer', playing:session.playbackState === 'playing'} : null;
         })()
         """;
@@ -110,14 +161,17 @@ public sealed class CdpProgressReader : IDisposable
         {
             await readGate.WaitAsync(token).ConfigureAwait(false);
             entered = true;
+            Status = "正在读取网易云本机页面";
             using var response = await http.GetAsync($"http://127.0.0.1:{port}/json", HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-            if (response.StatusCode != HttpStatusCode.OK || response.Content.Headers.ContentLength > MaximumBytes) return null;
+            if (response.StatusCode != HttpStatusCode.OK || response.Content.Headers.ContentLength > MaximumBytes) { Status = "网易云本机页面响应异常"; return null; }
             await using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
             using var list = JsonDocument.Parse(await ReadBoundedAsync(stream, MaximumBytes, token).ConfigureAwait(false), new JsonDocumentOptions { MaxDepth = 12 });
             var target = SelectTarget(list.RootElement, port);
-            if (target == null) return null;
+            if (target == null) { Status = "没有找到唯一的网易云播放页面"; return null; }
             using var socket = new ClientWebSocket();
+            Status = "正在连接网易云页面 WebSocket";
             await socket.ConnectAsync(target, websocketTransport, token).ConfigureAwait(false);
+            Status = "正在读取网易云页面曲目与进度";
             var request = JsonSerializer.SerializeToUtf8Bytes(new
             {
                 id = 1, method = "Runtime.evaluate",
@@ -132,13 +186,17 @@ public sealed class CdpProgressReader : IDisposable
                 using var reply = JsonDocument.Parse(bytes, new JsonDocumentOptions { MaxDepth = 12 });
                 var root = reply.RootElement;
                 if (Child(root, "id").TryNumber(out var id) && id == 1)
-                    return ParseReply(root, Environment.TickCount64);
+                {
+                    var playback = ParseReply(root, Environment.TickCount64);
+                    Status = playback == null ? "页面已连接，但未识别有效曲目或进度" : "已读取网易云本机播放进度";
+                    return playback;
+                }
             }
             return null;
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return null; }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { Status = "网易云读取超时；" + Status; return null; }
         catch (Exception ex) when (ex is HttpRequestException or WebSocketException or IOException or JsonException or ObjectDisposedException)
-        { return null; }
+        { Status = "网易云本机连接异常（" + ex.GetType().Name + "）；" + Status; return null; }
         finally { if (entered) readGate.Release(); }
     }
 

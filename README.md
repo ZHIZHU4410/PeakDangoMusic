@@ -6,9 +6,13 @@
 
 ## 下载与使用
 
-1. 在[Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases/latest)下载 **PeakDangoMusic-1.3.1-complete.zip**，完整解压。Source code压缩包只有源码，不能直接安装。
+1. 在[Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases/latest)下载完整安装包，完整解压。Source code压缩包只有源码，不能直接安装。
 2. 需要Windows x64、PEAK Mono版及BepInEx5。退出PEAK，运行“一键安装.cmd”，选择PEAK.exe；也可按[安装说明](packaging/安装说明.md)手动复制完整DLL和PeakDangoMusic文件夹。
 3. 重开游戏，**F9 → Folia歌词样式**选择；**F8**显隐。原Dango样式仍为默认，已有播放器连接与歌词参数保留。
+
+## 1.3.2 网易云进度兼容测试
+
+针对网易云 3.1.43 诊断报告中确认的内部模块位置变化，改为按已初始化接口结构查找曲目和进度，同时保留曲目 ID、时间范围及歧义校验。保留 3.1.42 读取方式，并增加相邻时间元素回退。F9 播放状态会直接显示页面连接、WebSocket 和进度读取失败信息。模拟检查和构建通过，真实播放效果请在游戏内验收。安装时请完整更新 DLL 和 `PeakDangoMusic/Native` 文件夹。
 
 ## 1.3.1 界面风格调整
 
