@@ -16,7 +16,7 @@ public sealed class LyricAnimation
     private readonly int seed;
     public IReadOnlyList<LyricGrapheme> Graphemes { get; }
 
-    public LyricAnimation(LyricsLine line, long nextLineStartMs = 0, bool wholeToken = false)
+    public LyricAnimation(LyricsLine line, long nextLineStartMs = 0, bool wholeToken = false, bool singleCharacter = false)
     {
         if(line==null)throw new ArgumentNullException(nameof(line));
         line = LyricUnicode.Normalize(line);
@@ -40,7 +40,8 @@ public sealed class LyricAnimation
             : (long)Math.Clamp((decimal)line.StartMs + (line.DurationMs > 0 ? line.DurationMs : 5000), long.MinValue, long.MaxValue);
         if (line.DurationMs > 0) timingEnd = Math.Min(timingEnd, (long)Math.Clamp((decimal)line.StartMs + line.DurationMs, long.MinValue, long.MaxValue));
         wordStarts = wholeToken ? glyphs.Select(_ => (double)line.StartMs).ToArray()
-            : LyricTokens.TimedGraphemeStarts(line, timingEnd) ?? EstimateWordStarts(glyphs,line.StartMs,duration);
+            : LyricTokens.TimedGraphemeStarts(line, timingEnd)
+                ?? (singleCharacter ? EstimateCharacterStarts(line,glyphs,timingEnd) : EstimateWordStarts(glyphs,line.StartMs,duration));
         seed = StableSeed(text);
     }
 
@@ -75,6 +76,20 @@ public sealed class LyricAnimation
             scale *= 1 + Noise(graphemeIndex, bucket, 4, seed) * .12 * amount;
         }
         return new(alpha, scale, x, y, rotation);
+    }
+
+    private static double[] EstimateCharacterStarts(LyricsLine line,LyricGrapheme[] glyphs,long end)
+    {
+        // Character mode uses the 1.2 character-token fallback, while retaining one
+        // complete line at its anchor. Never reuse the paired-CJK word-pop fallback.
+        var tokens=new LyricTokens(line with {Words=null},end,singleCharacter:true).Tokens;
+        var starts=new double[glyphs.Length];int token=0;
+        for(int i=0;i<glyphs.Length;i++)
+        {
+            while(token+1<tokens.Count && tokens[token+1].SourceStart<=glyphs[i].SourceStart)token++;
+            starts[i]=tokens.Count>0?tokens[token].StartMs:line.StartMs;
+        }
+        return starts;
     }
 
     private static double[] EstimateWordStarts(LyricGrapheme[] glyphs,long start,double duration)

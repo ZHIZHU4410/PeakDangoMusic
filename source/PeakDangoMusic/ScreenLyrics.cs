@@ -60,7 +60,7 @@ internal sealed class ScreenLyrics : IDisposable
             selected=new LyricsLine(token.StartMs,Math.Max(1,token.EndMs-token.StartMs),token.Text,new[]{new LyricsWord(token.StartMs,token.EndMs-token.StartMs,token.Text)},line.Translation);
         }
         if(changed || nextToken!=tokenIndex || animation==null)
-        {animation=new LyricAnimation(selected,tokens==null?end:selected.StartMs+selected.DurationMs,tokens!=null);tokenIndex=nextToken;dirty=true;}
+        {animation=new LyricAnimation(selected,tokens==null?end:selected.StartMs+selected.DurationMs,tokens!=null,mode!=1);tokenIndex=nextToken;dirty=true;}
         visible=true;
     }
     void Layout()

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using BepInEx.Configuration;
 using UnityEngine;
 
@@ -8,7 +9,7 @@ namespace PeakDangoMusic;
 public static class MusicPanel
 {
     static string? portText,pathText;
-    static GUIStyle? hint,title,rowLabel,valueStyle,buttonStyle,presetStyle,selectedStyle,selectedPresetStyle;
+    static GUIStyle? hint,title,rowLabel,valueStyle,buttonStyle,presetStyle,selectedStyle,selectedPresetStyle,sliderTrack;
     static Texture2D? pressedTexture,selectedTexture;
     static Font? numericFont;
     static GUISkin? styleSkin;
@@ -33,7 +34,9 @@ public static class MusicPanel
         hint=new GUIStyle(GUI.skin.label){wordWrap=true,fontSize=14};
         title=new GUIStyle(GUI.skin.label){wordWrap=true,fontStyle=FontStyle.Bold,fontSize=20};
         rowLabel=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleLeft,wordWrap=true,fontSize=16,margin=new RectOffset()};
-        valueStyle=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleRight,fontSize=15,margin=new RectOffset()};
+        valueStyle=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleRight,fontSize=15,margin=new RectOffset(),padding=new RectOffset()};
+        sliderTrack=new GUIStyle(GUI.skin.horizontalSlider){fixedHeight=24,margin=new RectOffset(),padding=new RectOffset(),border=new RectOffset()};
+        foreach(var state in new[]{sliderTrack.normal,sliderTrack.hover,sliderTrack.active,sliderTrack.focused})state.background=null;
         numericFont ??= Font.CreateDynamicFontFromOSFont(new[]{"Cascadia Mono","Consolas","Courier New"},16);
         valueStyle.font=numericFont;
         if(pressedTexture!=null)UnityEngine.Object.Destroy(pressedTexture);
@@ -66,33 +69,36 @@ public static class MusicPanel
         var plugin=Plugin.Instance;if(plugin==null){GUILayout.Label("漂浮歌词模块未加载，请重新打开 PEAK。");return;}
         Styles();
         GUILayout.Label("DangoMusic · 地图漂浮歌词",title);
-        GUILayout.Label("F9 打开独立设置并暂停本机游戏；关闭后恢复。联机队友继续运行。",hint);
+        GUILayout.Label("游戏选项 → 悬浮歌词 → 打开设置；歌词显隐也在此菜单中调整。",hint);
         DrawGroup(()=>Connection(plugin),0);GUILayout.Space(24);DrawGroup(()=>Fonts(plugin),.07f);GUILayout.Space(24);DrawGroup(()=>FoliaStyle(plugin),.14f);GUILayout.Space(24);DrawGroup(()=>Display(plugin),.21f);GUILayout.Space(24);DrawGroup(()=>Effects(plugin),.28f);
     }
     internal static void DrawStandalone(float availableWidth)
     {
         var plugin=Plugin.Instance;if(plugin==null)return;
         Styles();
+        float scrollInset=GUI.skin.verticalScrollbar.fixedWidth+GUI.skin.verticalScrollbar.margin.horizontal+GUI.skin.scrollView.padding.horizontal+12;
         if(availableWidth<880)
         {
             narrowScroll=GUILayout.BeginScrollView(narrowScroll,false,false,GUIStyle.none,GUI.skin.verticalScrollbar);
-            GUILayout.BeginVertical(GUILayout.Width(Mathf.Max(180,availableWidth-28)));
+            GUILayout.BeginVertical(GUILayout.Width(Mathf.Max(180,availableWidth-scrollInset)));
             DrawGroup(()=>Connection(plugin),0);GUILayout.Space(24);DrawGroup(()=>Fonts(plugin),.07f);GUILayout.Space(24);DrawGroup(()=>FoliaStyle(plugin),.14f);GUILayout.Space(24);DrawGroup(()=>Display(plugin),.21f);GUILayout.Space(24);DrawGroup(()=>Effects(plugin),.28f);
             GUILayout.EndVertical();GUILayout.EndScrollView();return;
         }
+        float leftWidth=availableWidth*.36f,rightWidth=availableWidth-leftWidth-22;
+        float contentInset=GUI.skin.box.padding.horizontal+scrollInset;
         GUILayout.BeginHorizontal();
-        GUILayout.BeginVertical(GUI.skin.box,GUILayout.Width(availableWidth*.36f),GUILayout.ExpandHeight(true));
+        GUILayout.BeginVertical(GUI.skin.box,GUILayout.Width(leftWidth),GUILayout.ExpandHeight(true));
         connectionScroll=GUILayout.BeginScrollView(connectionScroll,false,false,GUIStyle.none,GUI.skin.verticalScrollbar);
-        GUILayout.BeginVertical(GUILayout.Width(availableWidth*.36f-58));
+        GUILayout.BeginVertical(GUILayout.Width(Mathf.Max(180,leftWidth-contentInset)));
         DrawGroup(()=>Connection(plugin),0);
         GUILayout.EndVertical();GUILayout.EndScrollView();GUILayout.EndVertical();
         GUILayout.Space(22);
-        GUILayout.BeginVertical(GUI.skin.box,GUILayout.ExpandWidth(true),GUILayout.ExpandHeight(true));
+        GUILayout.BeginVertical(GUI.skin.box,GUILayout.Width(rightWidth),GUILayout.ExpandHeight(true));
         int tab=Selection(settingsTab,Tabs);
         if(tab!=settingsTab){settingsTab=tab;settingsScroll=Vector2.zero;ResetEntrance();}
         GUILayout.Space(16);
         settingsScroll=GUILayout.BeginScrollView(settingsScroll,false,false,GUIStyle.none,GUI.skin.verticalScrollbar);
-        GUILayout.BeginVertical(GUILayout.Width(availableWidth*.64f-80));
+        GUILayout.BeginVertical(GUILayout.Width(Mathf.Max(180,rightWidth-contentInset)));
         if(settingsTab==0)DrawGroup(()=>Display(plugin),.08f);else if(settingsTab==1)DrawGroup(()=>Effects(plugin),.08f);else if(settingsTab==2)DrawGroup(()=>FoliaStyle(plugin),.08f);else DrawGroup(()=>Fonts(plugin),.08f);
         GUILayout.EndVertical();GUILayout.EndScrollView();GUILayout.EndVertical();GUILayout.EndHorizontal();
     }
@@ -102,7 +108,7 @@ public static class MusicPanel
         SectionTitle("播放器连接");
         s.Source.Value=NamedSelection("播放器来源",s.Source.Value,Sources);GUILayout.Space(24);
         SectionTitle("播放状态");
-        Toggle("启用漂浮歌词（F8）",s.Enabled);
+        Toggle("启用漂浮歌词",s.Enabled);
         var state=plugin.Client.Snapshot;
         GUILayout.Label(state.Message,hint);
         GUILayout.Label("同步歌词："+state.Timeline.Lines.Count+" 行",hint);
@@ -215,7 +221,7 @@ public static class MusicPanel
         Toggle("允许歌词出现在墙内",s.AllowWalls);Toggle("歌词位于人物后景",s.BehindPlayer);
         GUILayout.Label("后景模式使用场景深度；关闭穿墙时会避开实体岩壁，没有空间就跳过。",hint);
         GUILayout.Space(16);
-        s.Offset.Value=(int)(Mathf.Round(SliderRow("时间偏移",s.Offset.Value,-10000,10000,s.Offset.Value+" ms")/50)*50);
+        s.Offset.Value=(int)SliderRow("时间偏移",s.Offset.Value,-10000,10000,value=>value.ToString("F0",CultureInfo.InvariantCulture)+" ms",50);
         GUILayout.Label("正值提前，负值延后。",hint);
     }
     static void Effects(Plugin plugin)
@@ -225,12 +231,19 @@ public static class MusicPanel
         int preset=PresetGrid(-1,EffectPresets,true);
         if(preset>=0)s.ApplyPreset(preset);
         GUILayout.Space(24);SectionTitle("文字动画");
-        Toggle("白色光晕",s.Glow);Toggle("逐字弹出",s.Pop);Toggle("轻微抖动",s.Wiggle);
+        Toggle("白色光晕",s.Glow);Toggle("逐字弹出",s.Pop);
         s.GlowColor.Value=NamedSelection("光晕颜色",s.GlowColor.Value,new[]{"随字色","粉色","蓝色","金色"});
         Slider("光晕强度",s.GlowStrength,0,3,"F2");Slider("光晕半径",s.GlowRadius,0,1,"F2");
-        GUILayout.Space(12);
-        s.Frequency.Value=Mathf.RoundToInt(SliderRow("抖动频率",s.Frequency.Value,4,24,s.Frequency.Value+" Hz"));
-        GUILayout.Space(12);Slider("抖动幅度",s.Amount,0,2,"F2");
+        GUILayout.Space(24);SectionTitle("文字抖动");
+        Toggle("轻微抖动",s.Wiggle);
+        GUILayout.Label(s.Wiggle.Value?"频率控制每秒变化次数，幅度控制抖动强弱；幅度为0时没有抖动。":"抖动已关闭，下方参数暂不生效；重新开启后沿用原数值。",hint);
+        bool wasEnabled=GUI.enabled;GUI.enabled=wasEnabled && s.Wiggle.Value;
+        try
+        {
+            s.Frequency.Value=(int)SliderRow("抖动频率",s.Frequency.Value,4,24,value=>value.ToString("F0",CultureInfo.InvariantCulture)+" Hz",1);
+            GUILayout.Space(12);Slider("抖动幅度",s.Amount,0,2,"F2");
+        }
+        finally{GUI.enabled=wasEnabled;}
         GUILayout.Space(12);s.Entrance.Value=NamedSelection("入场动画",s.Entrance.Value,Entrance);
         GUILayout.Space(14);s.Exit.Value=NamedSelection("退场动画",s.Exit.Value,Exit);
         GUILayout.Space(22);
@@ -266,7 +279,7 @@ public static class MusicPanel
         GUILayout.Label("原样式使用现有曲目、时间轴和歌词。未提供的音频频谱／节拍／封面不会伪造；相关附加效果以实际输入为准。",hint);
         GUILayout.Space(16);
         if(Button("预览20秒并返回游戏"))plugin.Preview(20);
-        GUILayout.Label("F8仍可显隐；切回Dango会停止Folia舞台以释放资源。",hint);
+        GUILayout.Label("使用「启用漂浮歌词」开关显隐；切回Dango会停止Folia舞台以释放资源。",hint);
     }
     static bool Button(string label,float width=0)
     {
@@ -304,19 +317,25 @@ public static class MusicPanel
     }
     static void Slider(string label,ConfigEntry<float> entry,float min,float max,string format)
     {
-        float value=SliderRow(label,entry.Value,min,max,entry.Value.ToString(format));
-        if(Math.Abs(value-entry.Value)>.001f){entry.Value=value;SetFeedback(label+"："+value.ToString(format));}
+        float step=format=="F0"?1:format=="F1"?.1f:.01f;
+        float value=SliderRow(label,entry.Value,min,max,value=>value.ToString(format,CultureInfo.InvariantCulture),step);
+        if(GUI.enabled && Math.Abs(value-entry.Value)>.001f){entry.Value=value;SetFeedback(label+"："+value.ToString(format));}
         GUILayout.Space(16);
     }
-    static float SliderRow(string label,float value,float min,float max,string display)
+    static float SliderRow(string label,float value,float min,float max,Func<float,string> display,float step)
     {
         Rect area=GUILayoutUtility.GetRect(GUIContent.none,GUIStyle.none,GUILayout.MinWidth(0),GUILayout.ExpandWidth(true),GUILayout.Height(36));
         float labelWidth=Mathf.Min(RowLabelWidth,area.width*.38f);
         float valueWidth=Mathf.Min(ValueWidth,area.width*.25f);
         GUI.Label(new Rect(area.x,area.y,labelWidth,area.height),label,rowLabel!);
-        GUI.Label(new Rect(area.xMax-valueWidth,area.y,valueWidth,area.height),display,valueStyle!);
         var slider=new Rect(area.x+labelWidth+ControlGap,area.y+(area.height-24)*.5f,Mathf.Max(0,area.width-labelWidth-valueWidth-ControlGap*2),24);
-        return GUI.HorizontalSlider(slider,value,min,max);
+        float thumbWidth=GUI.skin.horizontalSliderThumb.fixedWidth;
+        GUI.Box(new Rect(slider.x+thumbWidth*.5f,area.center.y-4,Mathf.Max(0,slider.width-thumbWidth),8),GUIContent.none,GUI.skin.horizontalSlider);
+        float next=GUI.HorizontalSlider(slider,Mathf.Clamp(value,min,max),min,max,sliderTrack!,GUI.skin.horizontalSliderThumb);
+        next=Mathf.Clamp(Mathf.Round(next/step)*step,min,max);
+        // Paint the value after handling the slider, using exactly the value we save.
+        NumericReadout.Draw(new Rect(area.xMax-valueWidth,area.y,valueWidth,area.height),display(next));
+        return next;
     }
     static void SectionTitle(string label)
     {

@@ -66,7 +66,7 @@ try {
         if((Get-PayloadHash $destination) -ne $row.sha256){throw ('写入校验失败；旧版保存在：'+$backup)}
     }
     [ordered]@{version=([Reflection.AssemblyName]::GetAssemblyName($target).Version).ToString(3);target=$target;backup=$backup;installedAt=(Get-Date -Format o)} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $backup 'receipt.json') -Encoding UTF8
-    Write-Host '安装完成。启动 PEAK，F9 设置，F8 显隐歌词。'
-    Write-Host 'BLF/LX 开启本机 API；原版网易云在 F9 选择对应来源。'
+    Write-Host '安装完成。启动 PEAK，在游戏选项中点击「悬浮歌词 → 打开设置」，菜单内控制歌词显隐。'
+    Write-Host 'BLF/LX 开启本机 API；原版网易云在悬浮歌词设置中选择对应来源。'
     Write-Host ('旧版备份：'+$backup);exit 0
 } catch {Write-Host ('操作未完成：'+$_.Exception.Message) -ForegroundColor Red;exit 1}

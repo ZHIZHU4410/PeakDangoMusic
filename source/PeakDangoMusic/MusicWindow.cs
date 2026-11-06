@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 
 namespace PeakDangoMusic;
 
@@ -17,17 +18,27 @@ internal sealed class MusicWindow : IDisposable
     bool previousVisible;
     float previousTimeScale;
     int suppressInputUntil=-1;
+    SharedSettingsMenu? owner;
+    EventSystem? eventSystem;
+    bool eventSystemWasEnabled;
+    GameObject? previousSelection;
     internal bool BlocksPlayerInput=>Open || Time.frameCount<=suppressInputUntil;
     internal bool Pausing=>Open && SceneManager.GetActiveScene().name!="Title" && Character.localCharacter!=null && Camera.main!=null;
-    internal void Toggle()
+    internal void Show(SharedSettingsMenu source)
     {
-        if(Open){Close();return;}
+        if(Open)return;
+        owner=source;
+        eventSystem=EventSystem.current;
+        if(eventSystem!=null){eventSystemWasEnabled=eventSystem.enabled;previousSelection=eventSystem.currentSelectedGameObject;eventSystem.SetSelectedGameObject(null);eventSystem.enabled=false;}
         previousLock=Cursor.lockState;previousVisible=Cursor.visible;previousTimeScale=Time.timeScale;Open=true;MusicPanel.ResetEntrance();KeepCursor();
     }
+    internal void CheckOwner(){if(Open && (owner==null || !owner.isActiveAndEnabled))Close();}
     internal void Close()
     {
         if(!Open)return;
         Open=false;Time.timeScale=previousTimeScale;Cursor.lockState=previousLock;Cursor.visible=previousVisible;
+        if(eventSystem!=null){eventSystem.enabled=eventSystemWasEnabled;if(previousSelection!=null && previousSelection.activeInHierarchy)eventSystem.SetSelectedGameObject(previousSelection);}
+        eventSystem=null;previousSelection=null;owner=null;
         suppressInputUntil=Time.frameCount+1;
         Plugin.Instance?.Config.Save();
     }
@@ -77,6 +88,7 @@ internal sealed class MusicWindow : IDisposable
             float scale=Mathf.Clamp(Mathf.Min(Screen.width/1920f,Screen.height/1080f),.85f,1.5f);
             float width=Screen.width/scale,height=Screen.height/scale;
             GUI.matrix=Matrix4x4.Scale(new Vector3(scale,scale,1));GUI.color=GUI.contentColor=GUI.backgroundColor=Color.white;GUI.depth=-1000;
+            GUI.color=new Color(0,0,0,.55f);GUI.DrawTexture(new Rect(0,0,width,height),Texture2D.whiteTexture);GUI.color=Color.white;
             rect.width=Mathf.Min(1440,Mathf.Max(280,width-48));rect.height=Mathf.Min(940,Mathf.Max(240,height-48));
             if(!centered){rect.x=(width-rect.width)*.5f;rect.y=(height-rect.height)*.5f;centered=true;}
             rect.x=Mathf.Clamp(rect.x,0,Mathf.Max(0,width-rect.width));rect.y=Mathf.Clamp(rect.y,0,Mathf.Max(0,height-rect.height));
@@ -88,9 +100,9 @@ internal sealed class MusicWindow : IDisposable
     {
         GUILayout.BeginHorizontal();GUILayout.BeginVertical();
         GUILayout.Label("DangoMusic · 漂浮歌词",heading);
-        GUILayout.Label((Pausing?"本机游戏已暂停":"歌词设置")+"  ·  F8 显隐歌词  ·  设置自动保存  ·  v"+Plugin.Version+(MusicPanel.Feedback.Length>0?"  ·  "+MusicPanel.Feedback:""),subtitle);
+        GUILayout.Label((Pausing?"本机游戏已暂停":"歌词设置")+"  ·  设置自动保存  ·  v"+Plugin.Version+(MusicPanel.Feedback.Length>0?"  ·  "+MusicPanel.Feedback:""),subtitle);
         GUILayout.EndVertical();
-        bool close=GUILayout.Button("返回游戏  ·  F9 / Esc",GUILayout.Width(220),GUILayout.Height(48));
+        bool close=GUILayout.Button("返回选项  ·  Esc",GUILayout.Width(220),GUILayout.Height(48));
         GUILayout.EndHorizontal();GUILayout.Space(18);
         MusicPanel.DrawStandalone(rect.width-48);
         GUI.DragWindow(new Rect(0,0,Mathf.Max(0,rect.width-270),90));

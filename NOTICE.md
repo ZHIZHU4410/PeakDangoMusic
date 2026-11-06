@@ -1,3 +1,7 @@
+# PeakDangoMusic 1.3.3 packaging
+
+The installation ZIP contains runtime components, scripts, documentation and licenses. Complete corresponding source is supplied separately as PeakDangoMusic-1.3.3-source.zip; see SOURCE.md. Historical references below to bundled source describe earlier archive layouts. No source or developer tools are needed to install the mod.
+
 # PeakDangoMusic 1.2.0 · Folia styles
 
 The optional Folia renderer directly builds all15 builtin visualizers from chthollyphile/folia-major commit7a5f975e337e5ba13f55d72b5bc68983bf41c379 (0.7.23). Original copyrights and AGPL-3.0 license are retained in source/FoliaRenderer/vendor/folia-major. PEAK's offscreen frontend/IPC adapter is AGPL-3.0; its source, lockfile and runtime assembly script accompany the binary. Folia is not endorsed by or affiliated with this PEAK adaptation.

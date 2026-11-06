@@ -14,13 +14,13 @@ internal sealed class MusicSettings
     internal readonly ConfigEntry<bool> FoliaBackground,FoliaSoftware;
     internal MusicSettings(ConfigFile config)
     {
-        Enabled=config.Bind("连接","启用漂浮歌词",true,"F8 显示或隐藏歌词；播放器自行播放，模组只读同步。");
+        Enabled=config.Bind("连接","启用漂浮歌词",true,"在游戏选项的悬浮歌词菜单中显示或隐藏歌词；播放器自行播放，模组只读同步。");
         Source=config.Bind("连接","播放器来源",0,new ConfigDescription("0=BLF/LX本机API；1=原版网易云（Windows媒体接口与本机进度接口）。",new AcceptableValueRange<int>(0,1)));
         NetEasePort=config.Bind("连接","网易云本机端口",9223,new ConfigDescription("原版网易云可选本机进度连接端口。未公开Windows播放进度时，使用包内脚本启动网易云。",new AcceptableValueRange<int>(1,65535)));
         Port=config.Bind("连接","LX本机端口",23330,new ConfigDescription("BLF / LX 设置→开放 API 的端口，仅连接127.0.0.1。",new AcceptableValueRange<int>(1,65535)));
         PlayerPath=config.Bind("连接","播放器路径","","可选：填写你自己的 BLF/LX exe 路径，仅用于打开播放器按钮；手动打开播放器无需设置。");
         FontFolder=config.Bind("字体","字体素材目录",@"D:\BaiduNetdiskDownload\字体搭配2.0 by阳春落羽","递归读取本地TTF、OTF、TTC字体，不安装或复制素材。");
-        FontPath=config.Bind("字体","歌词字体文件","","留空使用系统默认；F9字体页选择。缺失字形由系统字体补齐。");
+        FontPath=config.Bind("字体","歌词字体文件","","留空使用系统默认；悬浮歌词设置的字体页选择。缺失字形由系统字体补齐。");
         Style=config.Bind("样式","歌词显示样式","dango",new ConfigDescription("dango保留原有显示；其余为Folia的15种内置样式；random为每首随机。",new AcceptableValueList<string>(FoliaStyles.Ids)));
         FoliaPlacement=config.Bind("样式","Folia舞台位置",0,new ConfigDescription("0游戏内两侧悬浮舞台，界面中自动屏幕接续；1始终两侧屏幕；2全屏舞台。",new AcceptableValueRange<int>(0,2)));
         FoliaQuality=config.Bind("样式","Folia画质",1,new ConfigDescription("0=640x360，1=960x540，2=1280x720。",new AcceptableValueRange<int>(0,2)));

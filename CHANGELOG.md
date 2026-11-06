@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.3 (2026-11-06)
+- Move the complete lyrics menu into title/pause game options; remove F8/F9 shortcuts and control lyric visibility inside the menu.
+- Fix paired-character fallback in character reveal and full-line pop; retain full-line positioning and prefer supplied lyric timestamps.
+- Group the wiggle switch with its frequency/amplitude controls and disable those controls while wiggle is off.
+- Fix slider number rendering and scroll-viewport clipping; keep values aligned, snapped to displayed precision and correct at endpoints.
+- Include Thunderstore Mod Manager local manual installation steps in README and the installation guide.
+- Verified in the real game at two window sizes: complete numbers, decimals, Hz and -10000 ms; brightness drag reaches 6.0. Thirty pure lyric regression checks pass. This UI check does not revalidate all Folia presets or NetEase compatibility.
+
 ## 1.3.2 (2026-11-05)
 - Discover initialized NetEase playback exports by interface shape instead of relying on 3.1.42 module numbers; addresses the moved store observed in a 3.1.43 diagnostic report.
 - Show local page/WebSocket/read failures directly in the F9 playback status.

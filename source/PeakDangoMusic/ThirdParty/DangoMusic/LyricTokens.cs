@@ -65,8 +65,8 @@ public sealed class LyricTokens
         double scale = 1 + .55 * back * back, x = 0, y = 0, rotation = 0;
         if (wiggle)
         {
-            double frequency = (!double.IsNaN(wiggleFrequencyHz) && !double.IsInfinity(wiggleFrequencyHz)) ? Math.Clamp(wiggleFrequencyHz, 1, 24) : 8;
-            double amount = (!double.IsNaN(wiggleAmount) && !double.IsInfinity(wiggleAmount)) ? Math.Clamp(wiggleAmount, 0, 1.2) : .8;
+            double frequency = (!double.IsNaN(wiggleFrequencyHz) && !double.IsInfinity(wiggleFrequencyHz)) ? Math.Clamp(wiggleFrequencyHz, 4, 24) : 8;
+            double amount = (!double.IsNaN(wiggleAmount) && !double.IsInfinity(wiggleAmount)) ? Math.Clamp(wiggleAmount, 0, 2) : .8;
             double clock = (!double.IsNaN(animationSeconds) && !double.IsInfinity(animationSeconds)) ? Math.Clamp(animationSeconds, 0, long.MaxValue / 48d) : 0;
             long bucket = (long)Math.Floor(clock * frequency);
             rotation = Noise(tokenIndex, bucket, 1) * 9 * amount * Math.PI / 180;

@@ -12,7 +12,7 @@ namespace PeakDangoMusic;
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-    internal const string Version="1.3.2";
+    internal const string Version="1.3.3";
     internal static Plugin? Instance {get;private set;}
     internal MusicSettings Settings=null!;
     internal FontLibrary Fonts=null!;
@@ -38,16 +38,16 @@ public sealed class Plugin : BaseUnityPlugin
         Config.SettingChanged+=Changed;
         window=new MusicWindow();
         harmony=new Harmony("local.peak.dangomusic");harmony.PatchAll(typeof(Plugin).Assembly);
-        Logger.LogInfo("DangoMusic: F9 独立设置；F8 显隐。已有全能助手可用 F7→音乐。只读连接 BLF/LX 本机开放 API，默认23330。");
+        Logger.LogInfo("DangoMusic: 游戏选项 → 悬浮歌词 → 打开设置。歌词显隐在菜单内设置。只读连接 BLF/LX 本机开放 API，默认23330。");
+        Logger.LogInfo("DangoMusic slider numbers: embedded glyph renderer v1.");
     }
     void Changed(object sender,SettingChangedEventArgs args){saveAt=Time.unscaledTime+1;Renderer?.Invalidate();folia?.Invalidate();if(args.ChangedSetting==Settings.FontPath){Renderer?.RetryFonts();screen?.RetryFonts();}}
     void Update()
     {
         var keyboard=Keyboard.current;
-        if(keyboard!=null && keyboard.f9Key.wasPressedThisFrame)window.Toggle();
         if(window.Open && keyboard!=null && keyboard.escapeKey.wasPressedThisFrame)window.Close();
+        window.CheckOwner();
         window.KeepCursor();
-        if(keyboard!=null && keyboard.f8Key.wasPressedThisFrame && GUIUtility.keyboardControl==0)Settings.Enabled.Value=!Settings.Enabled.Value;
         Client.Configure(Settings);
         if(saveAt>=0 && Time.unscaledTime>=saveAt){saveAt=-1;Config.Save();}
     }
@@ -55,7 +55,7 @@ public sealed class Plugin : BaseUnityPlugin
     {
         string scene=SceneManager.GetActiveScene().name;
         bool previewing=Time.unscaledTime<previewUntil && preview!=null;
-        if(!Settings.Enabled.Value){LyricDisplayStatus="歌词显示：已关闭（F8）";Renderer.Hide();screen.Hide();folia.Suspend();return;}
+        if(!Settings.Enabled.Value){LyricDisplayStatus="歌词显示：已关闭（可在悬浮歌词设置中开启）";Renderer.Hide();screen.Hide();folia.Suspend();return;}
         long now=MusicClock.Now;
         MusicState state=previewing?new MusicState(true,"preview",preview!.Title,preview.Artist,Math.Clamp(now-previewTick,0,previewDuration),previewDuration,true,now,1,preview.Timeline,1,"预览中"):Client.Snapshot;
         long? position=state.PositionAt(now);
@@ -83,6 +83,7 @@ public sealed class Plugin : BaseUnityPlugin
     void LateUpdate(){window?.KeepCursor();TickLyrics();}
     void OnDisable(){window?.Close();folia?.Suspend();}
     void OnGUI(){window?.Draw();screen?.Draw();folia?.Draw();}
+    internal void OpenSettings(SharedSettingsMenu owner)=>window.Show(owner);
     internal void Preview(int seconds=8)
     {
         Settings.Enabled.Value=true;
@@ -97,6 +98,8 @@ public sealed class Plugin : BaseUnityPlugin
     void OnDestroy()
     {
         Config.SettingChanged-=Changed;
+        MusicOptionsEntry.Dispose();
+        NumericReadout.Dispose();
         try{Config.Save();}finally{try{window?.Dispose();}finally{harmony?.UnpatchSelf();Client?.Dispose();Renderer?.Dispose();screen?.Dispose();folia?.Dispose();if(Instance==this)Instance=null;}}
     }
 }

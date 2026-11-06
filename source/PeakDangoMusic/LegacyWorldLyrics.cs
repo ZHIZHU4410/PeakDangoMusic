@@ -49,7 +49,7 @@ internal sealed class LegacyWorldLyrics : IDisposable
         {
             cachedSong=state.Key;generation=state.LyricGeneration;cachedIndex=index;mode=settings.Mode.Value;
             line=LyricUnicode.Normalize(timeline.Lines[index]);end=index+1<timeline.Lines.Count?timeline.Lines[index+1].StartMs:Math.Min(state.DurationMs,line.StartMs+Math.Max(5000,line.DurationMs));
-            tokens=mode==1?new LyricTokens(line,end):null;animation=new LyricAnimation(line,end);key="";
+            tokens=mode==1?new LyricTokens(line,end):null;animation=new LyricAnimation(line,end,singleCharacter:mode!=1);key="";
         }
         if(position>=end){Hide();return;}
         LyricsLine selected=line!;int token=-1;
@@ -59,7 +59,7 @@ internal sealed class LegacyWorldLyrics : IDisposable
             selected=new LyricsLine(t.StartMs,Math.Max(1,t.EndMs-t.StartMs),t.Text,new[]{new LyricsWord(t.StartMs,t.EndMs-t.StartMs,t.Text)},line!.Translation);
         }
         string next=state.Key+"/"+generation+"/"+index+"/"+mode+"/"+token;
-        if(key!=next){key=next;animation=new LyricAnimation(selected,tokens==null?end:selected.StartMs+selected.DurationMs,tokens!=null);lastPaint="";paintAt=0;Place(camera);}
+        if(key!=next){key=next;animation=new LyricAnimation(selected,tokens==null?end:selected.StartMs+selected.DurationMs,tokens!=null,mode!=1);lastPaint="";paintAt=0;Place(camera);}
         if(mode!=2 && !settings.Follow.Value && settings.Smart.Value && Time.unscaledTime>=repositionAt)
         {
             var p=camera.WorldToViewportPoint(root!.transform.position);

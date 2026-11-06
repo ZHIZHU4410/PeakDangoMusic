@@ -114,7 +114,7 @@ internal sealed class WorldLyrics : IDisposable
         string text=Limit(raw.Text,160),translation=settings.Translation.Value?Limit(raw.Translation,160):"";
         // Truncation changes timed text alignment: fall back to line timing for that rare long line.
         var line=text==raw.Text?raw:new LyricsLine(raw.StartMs,raw.DurationMs,text,null,translation);
-        var e=new Entry{Root=new GameObject("DangoMusic lyric"),Line=line,Animation=new LyricAnimation(line,next,settings.Mode.Value==1),Born=Time.unscaledTime};
+        var e=new Entry{Root=new GameObject("DangoMusic lyric"),Line=line,Animation=new LyricAnimation(line,next,settings.Mode.Value==1,settings.Mode.Value!=1),Born=Time.unscaledTime};
         e.Root.transform.SetParent(root.transform,false);e.Main=Text(e.Root,"Original",text,settings.WorldFontSize);e.Translation=Text(e.Root,"Translation",translation,settings.WorldFontSize*.72f);
         float width=Mathf.Min(settings.Distance.Value*.6f,6.5f);e.Main.rectTransform.sizeDelta=new Vector2(width,20);e.Translation.rectTransform.sizeDelta=new Vector2(width,20);
         e.Main.ForceMeshUpdate(true,true);e.Translation.ForceMeshUpdate(true,true);
