@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.5 (2026-11-07)
+- Replace background sampling with one global game-clock decision: dark during the game-defined daytime, light at night.
+- Add an automatic day/night toggle and manual dark/light override in display settings.
+- Keep glow enabled for both colors; use a cool halo for dark text without increasing the dark face brightness.
+- Apply face color in all TMP fallback/atlas materials; keep vertex RGB white and animate alpha to prevent mixed colors.
+- Add an independent soft halo for PEAK's Mobile/Distance Field shader, which has no native glow pass; explicitly enable OUTLINE_ON.
+- Verified in a real-game Title render harness: day/night, near/far/retreat, both manual overrides and settings UI. Production build has 0 warnings/errors and 252 regression assertions pass. No gameplay map or all-preset Folia acceptance claimed.
+
+
+## 1.3.4 (2026-11-07, local update)
+- Adapt lyric/translation colors to the actual sentence area, with read-only PEAK time, sun, rain and snow fallback.
+- Sample a 160x90 background asynchronously at 4 Hz; median filtering, hysteresis and a short transition reduce flicker. No screenshots are saved or transmitted.
+- Add contrasting outlines to TMP and screen text, and contrasting shadows to legacy text. Preserve dark text contrast at high brightness; suppress glow for dark text.
+- Pass adaptive primary/secondary colors and daylight state to transparent Folia themes; retain light text on Folia-owned dark backgrounds.
+- Plugin and Folia builds pass; 238 regression assertions pass. Actual gameplay, GPU readback orientation and all Folia presets still require in-game validation.
+
+
 ## 1.3.3 (2026-11-06)
 - Move the complete lyrics menu into title/pause game options; remove F8/F9 shortcuts and control lyric visibility inside the menu.
 - Fix paired-character fallback in character reveal and full-line pop; retain full-line positioning and prefer supplied lyric timestamps.

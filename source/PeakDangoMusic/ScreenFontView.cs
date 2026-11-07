@@ -8,6 +8,9 @@ namespace PeakDangoMusic;
 internal sealed class ScreenFontView : IDisposable
 {
     readonly MusicSettings settings;
+    readonly AdaptiveLyrics.Palette palette=new();
+    readonly HashSet<Material> ownedMaterials=new();
+    readonly TextHalo mainHalo=new(),translationHalo=new();
     FontLibrary.Asset? asset;
     GameObject? root;
     TextMeshProUGUI? text,translation;
@@ -44,13 +47,16 @@ internal sealed class ScreenFontView : IDisposable
             }
             var point=new Vector2(width*(serial%2==0?.22f:.78f),height*.39f);
             text!.rectTransform.position=point;
-            LyricMaterial.Apply(text.fontSharedMaterial,settings);LyricMaterial.Apply(translation!.fontSharedMaterial,settings);
+            palette.Update(new Vector2(point.x/width,(point.y-text.preferredHeight*.5f)/height));
+            foreach(var m in text.fontMaterials){ownedMaterials.Add(m);LyricMaterial.Apply(m,settings,palette);}
+            foreach(var m in translation!.fontMaterials){ownedMaterials.Add(m);LyricMaterial.Apply(m,settings,palette);}
+            text.color=Color.white;
             translation!.fontSize=text.fontSize*.7f;translation.rectTransform.sizeDelta=new Vector2(width*.32f,height*.12f);
             translation.rectTransform.position=point-new Vector2(0,text.preferredHeight+8);
-            translation.text=settings.Translation.Value?translated:"";translation.color=LyricPlacement.TextColor;
+            translation.text=settings.Translation.Value?translated:"";translation.color=Color.white;
             var info=text.textInfo;
             for(int m=0;m<info.meshInfo.Length&&m<original.Length;m++)Array.Copy(original[m].vertices,info.meshInfo[m].vertices,Math.Min(original[m].vertices.Length,info.meshInfo[m].vertices.Length));
-            Color baseColor=LyricPlacement.TextColor*Mathf.Min(settings.Brightness.Value,2);baseColor.a=1;
+            Color baseColor=Color.white;baseColor.a=1;
             for(int c=0;c<info.characterCount&&c<mapping.Length;c++)
             {
                 var ch=info.characterInfo[c];if(!ch.isVisible)continue;int m=ch.materialReferenceIndex,v=ch.vertexIndex;
@@ -59,14 +65,15 @@ internal sealed class ScreenFontView : IDisposable
                 var color=baseColor;color.a=(float)frame.Alpha;
                 for(int k=0;k<4;k++){info.meshInfo[m].vertices[v+k]=center+rotation*((original[m].vertices[v+k]-center)*(float)frame.Scale)+new Vector3((float)frame.XOffset,-(float)frame.YOffset,0);info.meshInfo[m].colors32[v+k]=color;}
             }
-            text.UpdateVertexData(TMP_VertexDataUpdateFlags.Vertices|TMP_VertexDataUpdateFlags.Colors32);return true;
+            text.UpdateVertexData(TMP_VertexDataUpdateFlags.Vertices|TMP_VertexDataUpdateFlags.Colors32);
+            mainHalo.Update(text,settings,palette);translationHalo.Update(translation,settings,palette);return true;
         }
         catch(Exception ex){failed=true;Hide();if(Plugin.Instance!=null)Plugin.Instance.Notice="所选屏幕字体不可用，使用系统字体："+ex.Message;return false;}
     }
     TextMeshProUGUI Create(string name)
     {
         var go=new GameObject(name,typeof(RectTransform));go.transform.SetParent(root!.transform,false);var label=go.AddComponent<TextMeshProUGUI>();
-        label.font=asset!.Main;label.richText=false;label.raycastTarget=false;label.alignment=TextAlignmentOptions.Top;label.rectTransform.pivot=new Vector2(.5f,1);label.enableWordWrapping=true;label.maxVisibleLines=3;label.overflowMode=TextOverflowModes.Ellipsis;label.fontSharedMaterial=new Material(label.fontSharedMaterial);return label;
+        label.extraPadding=true;label.font=asset!.Main;label.richText=false;label.raycastTarget=false;label.alignment=TextAlignmentOptions.Top;label.rectTransform.pivot=new Vector2(.5f,1);label.enableWordWrapping=true;label.maxVisibleLines=3;label.overflowMode=TextOverflowModes.Ellipsis;label.fontSharedMaterial=new Material(label.fontSharedMaterial);return label;
     }
-    public void Dispose(){if(text!=null&&text.fontSharedMaterial!=null)UnityEngine.Object.Destroy(text.fontSharedMaterial);if(translation!=null&&translation.fontSharedMaterial!=null)UnityEngine.Object.Destroy(translation.fontSharedMaterial);if(root!=null)UnityEngine.Object.Destroy(root);asset?.Dispose();root=null;asset=null;}
+    public void Dispose(){mainHalo.Dispose();translationHalo.Dispose();foreach(var m in ownedMaterials)if(m!=null)UnityEngine.Object.Destroy(m);ownedMaterials.Clear();if(root!=null)UnityEngine.Object.Destroy(root);asset?.Dispose();root=null;asset=null;}
 }

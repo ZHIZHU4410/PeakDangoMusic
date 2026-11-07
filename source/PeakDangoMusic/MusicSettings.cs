@@ -4,7 +4,7 @@ using DangoMusic.Core;
 namespace PeakDangoMusic;
 internal sealed class MusicSettings
 {
-    internal readonly ConfigEntry<bool> Enabled,Translation,Glow,Pop,Wiggle,AllowWalls,BehindPlayer,Smart,Follow,FacePlayer,KeepAway,AboveGround,SplitLines;
+    internal readonly ConfigEntry<bool> AutoDayNight,ManualDark,Enabled,Translation,Glow,Pop,Wiggle,AllowWalls,BehindPlayer,Smart,Follow,FacePlayer,KeepAway,AboveGround,SplitLines;
     internal readonly ConfigEntry<int> Port,Mode,Frequency,Offset,Entrance,Exit,Source,NetEasePort,GlowColor;
     internal readonly ConfigEntry<float> FontSize,Distance,Amount,Brightness,Spread,GlowStrength,GlowRadius;
     internal readonly ConfigEntry<string> PlayerPath,FontFolder,FontPath;
@@ -31,6 +31,8 @@ internal sealed class MusicSettings
         FoliaFontScale=config.Bind("样式","Folia字体倍率",1f,new ConfigDescription("传入原样式的歌词字体倍率；自适应排版样式按自身规则缩放。",new AcceptableValueRange<float>(.5f,2)));
         FoliaBackground=config.Bind("样式","Folia舞台底色",false,"显示舞台底色；样式自身的色块、齿轮等装饰仍按原实现绘制。");
         FoliaSoftware=config.Bind("样式","Folia兼容渲染",false,"仅在显卡渲染失败时开启；使用软件图形模式，可能增加CPU占用。");
+        AutoDayNight=config.Bind("显示","昼夜自动字色",true,"开启：游戏白天深色、夜晚浅色；不随视角、天气或发光切换。关闭后使用手动字色。");
+        ManualDark=config.Bind("显示","手动深色字",false,"关闭昼夜自动字色后生效：开启为深色，关闭为浅色；两种字色均保留光晕。");
         Translation=config.Bind("显示","显示汉化歌词",false,"PEAK扩展选项；原项目只显示原文，默认关闭附加翻译。");
         Mode=config.Bind("显示","播放方式",0,new ConfigDescription("0整句；1单词（中文无词库时按字）；2整句固定位置、逐字显现，下一句才换位置。",new AcceptableValueRange<int>(0,2)));
         FontSize=config.Bind("显示","世界字号",1f,new ConfigDescription("对应原项目Scale：0.5–3，默认1倍；Unity字号根据倍率和距离换算。",new AcceptableValueRange<float>(.5f,3)));
@@ -60,7 +62,7 @@ internal sealed class MusicSettings
     internal float WorldFontSize=>2.8f*FontSize.Value*(Distance.Value/10f);
     internal void ApplyOriginalDefaults()
     {
-        Style.Value="dango";
+        Style.Value="dango";AutoDayNight.Value=true;ManualDark.Value=false;
         Enabled.Value=true;Translation.Value=false;Mode.Value=0;FontSize.Value=1;Brightness.Value=1;Distance.Value=10;Spread.Value=30;
         Follow.Value=false;Smart.Value=false;FacePlayer.Value=true;KeepAway.Value=true;AboveGround.Value=false;SplitLines.Value=true;
         AllowWalls.Value=true;BehindPlayer.Value=false;Offset.Value=0;

@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../source/PeakDangoMusic/LyricContrast.cs" Link="LyricContrast.cs" />
     <Compile Include="../../source/PeakDangoMusic/ThirdParty/DangoMusic/Lyrics.cs" Link="Lyrics.cs" />
     <Compile Include="../../source/PeakDangoMusic/ThirdParty/DangoMusic/LyricUnicode.cs" Link="LyricUnicode.cs" />
     <Compile Include="../../source/PeakDangoMusic/ThirdParty/DangoMusic/LyricTokens.cs" Link="LyricTokens.cs" />

@@ -59,16 +59,16 @@ function Stage(){
     animation=requestAnimationFrame(frame);window.peakFolia.ready();
     return()=>{unsubscribe();cancelAnimationFrame(animation)};
   },[currentTime]);
-  const theme:Theme=useMemo(()=>({...DEFAULT_THEME,backgroundColor:'#10171f',primaryColor:packet.primary,accentColor:packet.accent,secondaryColor:'#9AAEBE',fontFamily,fontFamilyStack:[fontFamily,'Microsoft YaHei','Arial'],animationIntensity:packet.intensity as Theme['animationIntensity']}),[packet.primary,packet.accent,packet.intensity,fontFamily]);
+  const theme:Theme=useMemo(()=>({...DEFAULT_THEME,backgroundColor:'#10171f',primaryColor:packet.primary,accentColor:packet.accent,secondaryColor:parseInt(packet.primary.slice(1,3),16)<128?'#263442':'#D8E2EB',fontFamily,fontFamilyStack:[fontFamily,'Microsoft YaHei','Arial'],animationIntensity:packet.intensity as Theme['animationIntensity']}),[packet.primary,packet.accent,packet.intensity,fontFamily]);
   const props={
     currentTime,duration:packet.durationMs/1000,currentLineIndex:index,lines,theme,subtitleTheme:theme,
     audioPower,audioBands:bands,seed:packet.key,songTitle:packet.title,songArtist:packet.artist,
-    lyricsFontScale:packet.fontScale,subtitleFontScale:1,showText:true,isDaylight:false,
+    lyricsFontScale:packet.fontScale,subtitleFontScale:1,showText:true,isDaylight:parseInt(packet.primary.slice(1,3),16)<128,
     isPlayerChromeHidden:true,showSubtitleTranslation:packet.translation,hideTranslationSubtitle:!packet.translation,
     subtitleContentMode:packet.translation?'translation':'none',showHarmonySubtitle:false,
     paused:!packet.playing,isPreviewMode:true,background:{mode:'common',transparent:!packet.background},
   };
-  return <div className="peak-stage" style={{visibility:packet.visible&&lines.length?'visible':'hidden',background:packet.background?'#10171f':'transparent'}}>
+  return <div className="peak-stage" style={{visibility:packet.visible&&lines.length?'visible':'hidden',background:packet.background?'#10171f':'transparent',textShadow:parseInt(packet.primary.slice(1,3),16)<128?'1px 1px 1px #fff,-1px -1px 1px #fff':'1px 1px 2px #07101a,-1px -1px 1px #07101a'}}>
     {packet.visible&&lines.length>0&&<Boundary key={packet.revision} reset={String(packet.revision)}>
       <Suspense fallback={null}><Preset mode={packet.mode} revision={packet.revision} props={props}/></Suspense>
     </Boundary>}

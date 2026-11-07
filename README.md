@@ -4,6 +4,8 @@
 
 作者：**布洛芬（ZHIZHU4410 / BLF4410）**；Codex辅助开发。Dango来源与Folia原作者署名见[NOTICE.md](NOTICE.md)。
 
+1.3.5 本地更新：默认按游戏时间统一切换字色，白天深色、夜晚浅色；不再读取背景画面。歌词设置的「昼夜自动字色」关闭后，可用「手动使用深色字」固定深色或浅色。两种字色都保留光晕；亮度只增强浅色字的字面，光晕强度与半径独立控制。
+
 ## 下载与使用
 
 1. 在[Releases](https://github.com/ZHIZHU4410/PeakDangoMusic/releases/latest)下载完整安装包，完整解压。Source code压缩包只有源码，不能直接安装。

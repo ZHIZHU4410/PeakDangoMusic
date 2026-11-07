@@ -8,6 +8,7 @@ namespace PeakDangoMusic;
 /// <summary>Displays Folia's original pixels as a local world canvas or an input-free screen stage.</summary>
 internal sealed class FoliaView : IDisposable
 {
+    readonly AdaptiveLyrics.Palette palette=new();
     readonly MusicSettings settings;
     readonly FoliaClient client=new();
     Texture2D? texture;
@@ -44,7 +45,9 @@ internal sealed class FoliaView : IDisposable
     bool Paint(MusicState state,Camera? camera,bool menu,long now)
     {
         fault="";
-        client.Set(new FoliaClient.Request(state,settings));
+        var sample=(!menu&&settings.FoliaPlacement.Value==0&&camera!=null)?(Vector2)camera.WorldToViewportPoint(anchor):new Vector2(side==0?.25f:.75f,.61f);
+        palette.Update(sample);
+        client.Set(new FoliaClient.Request(state,settings,palette));
         var frame=client.TakeFrame();
         if(frame!=null)
         {
@@ -80,7 +83,7 @@ internal sealed class FoliaView : IDisposable
         float width=Mathf.Clamp(settings.Distance.Value*.65f*settings.FoliaSize.Value,1.5f,18);
         root.transform.localScale=Vector3.one*(width/960);
         canvas.worldCamera=camera;
-        image.texture=texture;image.color=new Color(settings.Brightness.Value,settings.Brightness.Value,settings.Brightness.Value,settings.FoliaOpacity.Value);
+        image.texture=texture;image.color=new Color(palette.IsDark&&!settings.FoliaBackground.Value?1:settings.Brightness.Value,palette.IsDark&&!settings.FoliaBackground.Value?1:settings.Brightness.Value,palette.IsDark&&!settings.FoliaBackground.Value?1:settings.Brightness.Value,settings.FoliaOpacity.Value);
         material?.SetInt("unity_GUIZTestMode",settings.AllowWalls.Value&&!settings.BehindPlayer.Value?(int)CompareFunction.Always:(int)CompareFunction.LessEqual);
         bool allowed=settings.AllowWalls.Value||!Physics.Linecast(camera!.transform.position,anchor,LayerMask.GetMask("Map","Terrain"),QueryTriggerInteraction.Ignore);
         root.SetActive(allowed);return true;
@@ -107,7 +110,7 @@ internal sealed class FoliaView : IDisposable
         try
         {
             GUI.matrix=Matrix4x4.identity;GUI.depth=-2000;GUI.enabled=true;
-            GUI.color=new Color(settings.Brightness.Value,settings.Brightness.Value,settings.Brightness.Value,settings.FoliaOpacity.Value);
+            GUI.color=new Color(palette.IsDark&&!settings.FoliaBackground.Value?1:settings.Brightness.Value,palette.IsDark&&!settings.FoliaBackground.Value?1:settings.Brightness.Value,palette.IsDark&&!settings.FoliaBackground.Value?1:settings.Brightness.Value,settings.FoliaOpacity.Value);
             Rect rect;
             if(settings.FoliaPlacement.Value==2)rect=new Rect(0,0,Screen.width,Screen.height);
             else

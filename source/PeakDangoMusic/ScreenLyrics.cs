@@ -7,6 +7,7 @@ namespace PeakDangoMusic;
 internal sealed class ScreenLyrics : IDisposable
 {
     readonly MusicSettings settings;
+    readonly AdaptiveLyrics.Palette palette=new();
     readonly LyricLineView lineView=new();
     readonly List<Glyph> glyphs=new();
     Font? font;
@@ -93,7 +94,8 @@ internal sealed class ScreenLyrics : IDisposable
         {
             GUI.matrix=Matrix4x4.identity;GUI.depth=-2000;GUI.enabled=true;
             float center=Screen.width*(serial%2==0?.22f:.78f),top=Screen.height*.61f,height=style.fontSize*1.35f;
-            Color color=LyricPlacement.TextColor*Mathf.Min(settings.Brightness.Value,2);color.a=1;
+            palette.Update(new Vector2(center/Screen.width,1-(top+rowWidths.Count*height*.5f)/Screen.height));
+            Color color=palette.Face*(palette.IsDark?1:Mathf.Min(settings.Brightness.Value,2));color.a=1;
             foreach(var glyph in glyphs)
             {
                 var frame=animation.Sample(glyph.Index,position,Time.realtimeSinceStartup,settings.Pop.Value || mode==2,settings.Wiggle.Value,settings.Frequency.Value,settings.Amount.Value);
@@ -104,11 +106,14 @@ internal sealed class ScreenLyrics : IDisposable
                 GUI.matrix=Matrix4x4.identity;
                 GUIUtility.ScaleAroundPivot(new Vector2((float)frame.Scale,(float)frame.Scale),pivot);
                 GUIUtility.RotateAroundPivot((float)frame.Rotation*Mathf.Rad2Deg,pivot);
-                GUI.color=new Color(0,0,0,(float)frame.Alpha*.8f);
+                var outline=palette.Outline;outline.a=(float)frame.Alpha*.95f;GUI.color=outline;
+                GUI.Label(new Rect(x-1,y-1,glyph.Width+12,height),glyph.Text,style);
+                GUI.Label(new Rect(x+1,y-1,glyph.Width+12,height),glyph.Text,style);
+                GUI.Label(new Rect(x-1,y+1,glyph.Width+12,height),glyph.Text,style);
                 GUI.Label(new Rect(x+2,y+2,glyph.Width+12,height),glyph.Text,style);
                 if(settings.Glow.Value)
                 {
-                    var glow=color;glow.a=(float)frame.Alpha*Mathf.Clamp01(settings.GlowStrength.Value)*.25f;GUI.color=glow;
+                    var glow=palette.IsDark?new Color(.55f,.78f,1,1):color;glow.a=(float)frame.Alpha*Mathf.Clamp01(settings.GlowStrength.Value)*.25f;GUI.color=glow;
                     GUI.Label(new Rect(x-2,y,glyph.Width+12,height),glyph.Text,style);
                     GUI.Label(new Rect(x+2,y,glyph.Width+12,height),glyph.Text,style);
                 }
@@ -117,7 +122,9 @@ internal sealed class ScreenLyrics : IDisposable
             }
             if(settings.Translation.Value && !string.IsNullOrWhiteSpace(line?.Translation))
             {
-                GUI.matrix=Matrix4x4.identity;GUI.color=LyricPlacement.TextColor;
+                GUI.matrix=Matrix4x4.identity;GUI.color=palette.Outline;
+                GUI.Label(new Rect(center-Screen.width*.16f+1,top+rowWidths.Count*height+9,Screen.width*.32f,height*2),line!.Translation,translationStyle);
+                GUI.color=palette.Face;
                 GUI.Label(new Rect(center-Screen.width*.16f,top+rowWidths.Count*height+8,Screen.width*.32f,height*2),line!.Translation,translationStyle);
             }
         }

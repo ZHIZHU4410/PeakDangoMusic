@@ -24,7 +24,10 @@ internal sealed class WorldLyrics : IDisposable
     {
         internal GameObject Root=null!;internal TextMeshPro Main=null!,Translation=null!;
         internal LyricsLine Line=null!;internal LyricAnimation Animation=null!;internal TMP_MeshInfo[] Original=null!;
+        internal Material[] MainMaterials=Array.Empty<Material>(),TranslationMaterials=Array.Empty<Material>();
+        internal readonly TextHalo MainHalo=new(),TranslationHalo=new();
         internal long LastPosition;
+        internal readonly AdaptiveLyrics.Palette Palette=new();
         internal Vector3 Anchor,Viewport;internal Quaternion Orientation;internal float Born,Retired=-1;internal int[] CharacterToGrapheme=Array.Empty<int>();
     }
     internal WorldLyrics(MusicSettings settings,ManualLogSource log){this.settings=settings;this.log=log;compatible=new LegacyWorldLyrics(settings,log);}
@@ -118,6 +121,7 @@ internal sealed class WorldLyrics : IDisposable
         e.Root.transform.SetParent(root.transform,false);e.Main=Text(e.Root,"Original",text,settings.WorldFontSize);e.Translation=Text(e.Root,"Translation",translation,settings.WorldFontSize*.72f);
         float width=Mathf.Min(settings.Distance.Value*.6f,6.5f);e.Main.rectTransform.sizeDelta=new Vector2(width,20);e.Translation.rectTransform.sizeDelta=new Vector2(width,20);
         e.Main.ForceMeshUpdate(true,true);e.Translation.ForceMeshUpdate(true,true);
+        e.MainMaterials=e.Main.fontMaterials;e.TranslationMaterials=e.Translation.fontMaterials;
         float height=Mathf.Max(.3f,e.Main.textBounds.size.y);e.Translation.transform.localPosition=new Vector3(0,-height*.6f-.2f,0);
         if(!Place(e,camera)){DestroyEntry(e);return null;}
         e.Original=e.Main.textInfo.CopyMeshInfoVertexData();e.CharacterToGrapheme=new int[e.Main.textInfo.characterCount];
@@ -132,8 +136,8 @@ internal sealed class WorldLyrics : IDisposable
     TextMeshPro Text(GameObject parent,string label,string value,float size)
     {
         var go=new GameObject(label);go.transform.SetParent(parent.transform,false);var text=go.AddComponent<TextMeshPro>();text.font=font;text.fontSize=size;
-        text.text=value;text.richText=false;text.enableWordWrapping=true;text.maxVisibleLines=3;text.overflowMode=TextOverflowModes.Ellipsis;text.alignment=TextAlignmentOptions.Center;
-        text.color=LyricPlacement.TextColor;text.raycastTarget=false;
+        text.extraPadding=true;text.text=value;text.richText=false;text.enableWordWrapping=true;text.maxVisibleLines=3;text.overflowMode=TextOverflowModes.Ellipsis;text.alignment=TextAlignmentOptions.Center;
+        text.color=Color.white;text.raycastTarget=false;
         var material=new Material(text.fontSharedMaterial);text.fontSharedMaterial=material;
         LyricMaterial.Apply(material,settings);
         if(material.HasProperty("_ZTestMode"))material.SetFloat("_ZTestMode",settings.AllowWalls.Value && !settings.BehindPlayer.Value?(int)CompareFunction.Always:(int)CompareFunction.LessEqual);
@@ -183,7 +187,11 @@ internal sealed class WorldLyrics : IDisposable
             }
             e.Anchor=LyricPlacement.KeepDistance(e.Anchor,camera,settings);
             e.Root.transform.rotation=settings.FacePlayer.Value?LyricPlacement.Face(e.Anchor,camera):e.Orientation;e.Root.transform.position=e.Anchor+camera.transform.up*y;e.Root.transform.localScale=Vector3.one*scale;
-            e.Translation.alpha=alpha;
+            e.Palette.Update(camera.WorldToViewportPoint(e.Main.renderer.bounds.center));
+            foreach(var m in e.MainMaterials)LyricMaterial.Apply(m,settings,e.Palette);
+            foreach(var m in e.TranslationMaterials)LyricMaterial.Apply(m,settings,e.Palette);
+            e.Main.color=Color.white;
+            e.Translation.color=Color.white;e.Translation.alpha=alpha;
             if(e.Retired<0)e.LastPosition=position;
             var info=e.Main.textInfo;
             for(int m=0;m<info.meshInfo.Length && m<e.Original.Length;m++)Array.Copy(e.Original[m].vertices,info.meshInfo[m].vertices,Math.Min(e.Original[m].vertices.Length,info.meshInfo[m].vertices.Length));
@@ -200,10 +208,11 @@ internal sealed class WorldLyrics : IDisposable
                 for(int k=0;k<4;k++)
                 {
                     vertices[vi+k]=centre+rotation*((original[vi+k]-centre)*(float)frame.Scale)+new Vector3((float)frame.XOffset*pixel,(float)frame.YOffset*pixel,0);
-                    colors[vi+k]=new Color32(247,225,215,(byte)Mathf.RoundToInt(255*Mathf.Clamp01(visible)));
+                    colors[vi+k]=new Color(1,1,1,Mathf.Clamp01(visible));
                 }
             }
             e.Main.UpdateVertexData(TMP_VertexDataUpdateFlags.Vertices|TMP_VertexDataUpdateFlags.Colors32);
+            e.MainHalo.Update(e.Main,settings,e.Palette);e.TranslationHalo.Update(e.Translation,settings,e.Palette);
         }
     }
     static string Limit(string text,int elements)
@@ -213,8 +222,10 @@ internal sealed class WorldLyrics : IDisposable
     void ClearEntries(){foreach(var e in entries)DestroyEntry(e);entries.Clear();current=null;}
     static void DestroyEntry(Entry e)
     {
-        if(e.Main!=null && e.Main.fontSharedMaterial!=null)UnityEngine.Object.Destroy(e.Main.fontSharedMaterial);
-        if(e.Translation!=null && e.Translation.fontSharedMaterial!=null)UnityEngine.Object.Destroy(e.Translation.fontSharedMaterial);
+        e.MainHalo.Dispose();e.TranslationHalo.Dispose();
+        foreach(var m in e.MainMaterials.Concat(e.TranslationMaterials).Distinct())if(m!=null)UnityEngine.Object.Destroy(m);
+        if(e.MainMaterials.Length==0&&e.Main!=null)UnityEngine.Object.Destroy(e.Main.fontSharedMaterial);
+        if(e.TranslationMaterials.Length==0&&e.Translation!=null)UnityEngine.Object.Destroy(e.Translation.fontSharedMaterial);
         if(e.Root!=null)UnityEngine.Object.Destroy(e.Root);
     }
     public void Dispose(){ClearEntries();customFont?.Dispose();customFont=null;compatible.Dispose();if(root!=null)UnityEngine.Object.Destroy(root);root=null;foreach(var r in resources)if(r!=null)UnityEngine.Object.Destroy(r);resources.Clear();font=null;}

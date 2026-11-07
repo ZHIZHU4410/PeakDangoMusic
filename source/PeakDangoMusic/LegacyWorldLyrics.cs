@@ -10,6 +10,8 @@ namespace PeakDangoMusic;
 /// <summary>Native Unity dynamic-font fallback when TextCore cannot build an SDF atlas.</summary>
 internal sealed class LegacyWorldLyrics : IDisposable
 {
+    readonly AdaptiveLyrics.Palette palette=new();
+    TextMesh? outline,translationOutline;
     readonly MusicSettings settings;readonly ManualLogSource log;
     Font? font;GameObject? root;TextMesh? original,translation;
     Vector3 viewport;
@@ -27,7 +29,7 @@ internal sealed class LegacyWorldLyrics : IDisposable
         {
             font=Font.CreateDynamicFontFromOSFont(new[]{"Microsoft YaHei","Malgun Gothic","Arial"},64);if(font==null)return false;
             root=new GameObject("DangoMusic compatible world lyrics");UnityEngine.Object.DontDestroyOnLoad(root);
-            original=Text("Original");translation=Text("Translation");translation.transform.localPosition=new Vector3(0,-.55f,0);
+            original=Text("Original");translation=Text("Translation");outline=Text("Outline");translationOutline=Text("Translation outline");translation.transform.localPosition=new Vector3(0,-.55f,0);
             log.LogInfo("漂浮歌词已启用原生动态字体兼容渲染。");return true;
         }
         catch(Exception e){log.LogWarning("兼容文字字体加载失败: "+e.Message);return false;}
@@ -71,7 +73,8 @@ internal sealed class LegacyWorldLyrics : IDisposable
             root.transform.position=camera.ViewportToWorldPoint(viewport);
             root.SetActive(settings.AllowWalls.Value || !Physics.Linecast(camera.transform.position,root.transform.position,LayerMask.GetMask("Map","Terrain"),QueryTriggerInteraction.Ignore));
         }
-        foreach(var material in materials)LyricMaterial.Apply(material,settings);
+        palette.Update(camera.WorldToViewportPoint(root.transform.position));
+        foreach(var material in materials)LyricMaterial.Apply(material,settings,palette);
         root.transform.position=LyricPlacement.KeepDistance(root.transform.position,camera,settings);
         root.transform.rotation=settings.FacePlayer.Value?LyricPlacement.Face(root.transform.position,camera):orientation;
         float factor=settings.FontSize.Value*(settings.Distance.Value/10f);original.characterSize=.04f*factor;translation.characterSize=.029f*factor;translation.transform.localPosition=new Vector3(0,-.55f*factor,0);
@@ -83,11 +86,19 @@ internal sealed class LegacyWorldLyrics : IDisposable
                 var glyph=animation.Graphemes[i];var frame=animation.Sample(i,position,Time.unscaledTime,settings.Pop.Value || mode==2,settings.Wiggle.Value,settings.Frequency.Value,settings.Amount.Value);
                 float alpha=mode!=2 && !settings.Pop.Value && !settings.Wiggle.Value?1:(float)frame.Alpha;int size=Math.Clamp((int)Math.Round(64*frame.Scale),48,110);
                 if(columns>=22 && !string.IsNullOrWhiteSpace(glyph.Text)){text.Append('\n');columns=0;}
-                text.Append("<color=#F7E1D7").Append(((int)(Math.Clamp(alpha,0,1)*255)).ToString("X2")).Append("><size=").Append(size).Append('>').Append(Escape(glyph.Text)).Append("</size></color>");
+                text.Append("<color=#").Append(ColorUtility.ToHtmlStringRGB(palette.Face)).Append(((int)(Math.Clamp(alpha,0,1)*255)).ToString("X2")).Append("><size=").Append(size).Append('>').Append(Escape(glyph.Text)).Append("</size></color>");
                 columns+=glyph.Text.Any(c=>c>255)?2:1;
             }
             string painted=text.ToString();if(painted!=lastPaint){original.text=painted;lastPaint=painted;}
-            translation.text=settings.Translation.Value?Wrap(selected.Translation,32):"";translation.color=LyricPlacement.TextColor;
+            translation.text=settings.Translation.Value?Wrap(selected.Translation,32):"";translation.color=palette.Face;
+            if(outline!=null && translationOutline!=null)
+            {
+                outline.text=painted.Replace(ColorUtility.ToHtmlStringRGB(palette.Face),ColorUtility.ToHtmlStringRGB(palette.Outline));
+                outline.characterSize=original.characterSize;outline.color=Color.white;
+                outline.transform.localPosition=new Vector3(.012f*factor,-.012f*factor,.006f);
+                translationOutline.text=translation.text;translationOutline.color=palette.Outline;translationOutline.characterSize=translation.characterSize;
+                translationOutline.transform.localPosition=translation.transform.localPosition+new Vector3(.012f*factor,-.012f*factor,.006f);
+            }
         }
     }
     void Place(Camera camera)

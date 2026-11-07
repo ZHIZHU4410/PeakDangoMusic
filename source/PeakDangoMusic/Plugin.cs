@@ -12,7 +12,7 @@ namespace PeakDangoMusic;
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-    internal const string Version="1.3.3";
+    internal const string Version="1.3.5";
     internal static Plugin? Instance {get;private set;}
     internal MusicSettings Settings=null!;
     internal FontLibrary Fonts=null!;
@@ -21,6 +21,7 @@ public sealed class Plugin : BaseUnityPlugin
     ScreenLyrics screen=null!;
     FoliaView folia=null!;
     bool screenMode;
+    readonly AdaptiveLyrics contrast=new();
     MusicWindow window=null!;
     Harmony? harmony;
     internal bool BlocksPlayerInput=>window?.BlocksPlayerInput ?? false;
@@ -34,12 +35,14 @@ public sealed class Plugin : BaseUnityPlugin
     internal void RestartFolia()=>folia.Restart();
     void Awake()
     {
+        AdaptiveLyrics.Current=contrast;
         Instance=this;Config.SaveOnConfigSet=false;Settings=new MusicSettings(Config);Fonts=new FontLibrary(Settings.FontFolder.Value);Client=new MusicClient(Settings);Renderer=new WorldLyrics(Settings,Logger);screen=new ScreenLyrics(Settings);folia=new FoliaView(Settings);
         Config.SettingChanged+=Changed;
         window=new MusicWindow();
         harmony=new Harmony("local.peak.dangomusic");harmony.PatchAll(typeof(Plugin).Assembly);
         Logger.LogInfo("DangoMusic: 游戏选项 → 悬浮歌词 → 打开设置。歌词显隐在菜单内设置。只读连接 BLF/LX 本机开放 API，默认23330。");
         Logger.LogInfo("DangoMusic slider numbers: embedded glyph renderer v1.");
+        Logger.LogInfo("DangoMusic adaptive contrast: game day/night + manual override; no screen sampling.");
     }
     void Changed(object sender,SettingChangedEventArgs args){saveAt=Time.unscaledTime+1;Renderer?.Invalidate();folia?.Invalidate();if(args.ChangedSetting==Settings.FontPath){Renderer?.RetryFonts();screen?.RetryFonts();}}
     void Update()
@@ -53,6 +56,7 @@ public sealed class Plugin : BaseUnityPlugin
     }
     void TickLyrics()
     {
+        contrast.Tick();
         string scene=SceneManager.GetActiveScene().name;
         bool previewing=Time.unscaledTime<previewUntil && preview!=null;
         if(!Settings.Enabled.Value){LyricDisplayStatus="歌词显示：已关闭（可在悬浮歌词设置中开启）";Renderer.Hide();screen.Hide();folia.Suspend();return;}
@@ -99,7 +103,7 @@ public sealed class Plugin : BaseUnityPlugin
     {
         Config.SettingChanged-=Changed;
         MusicOptionsEntry.Dispose();
-        NumericReadout.Dispose();
+        NumericReadout.Dispose();contrast.Dispose();
         try{Config.Save();}finally{try{window?.Dispose();}finally{harmony?.UnpatchSelf();Client?.Dispose();Renderer?.Dispose();screen?.Dispose();folia?.Dispose();if(Instance==this)Instance=null;}}
     }
 }

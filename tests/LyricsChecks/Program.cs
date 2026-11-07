@@ -45,3 +45,35 @@ var small=tokens.Sample(0,1100,.1,wiggleAmount:1);
 var large=tokens.Sample(0,1100,.1,wiggleAmount:2);
 Check(Math.Abs(large.XOffset-2*small.XOffset)<1e-9 && Math.Abs(large.Rotation-2*small.Rotation)<1e-9,"Amplitude 2 must not be clamped to 1.2");
 Console.WriteLine($"Passed {checks} lyric regression checks.");
+
+Check(PeakDangoMusic.LyricContrast.UseDark(1,false),"Snow / bright sky requires dark lyrics");
+Check(!PeakDangoMusic.LyricContrast.UseDark(0,true),"Night / deep shadow requires light lyrics");
+Check(!PeakDangoMusic.LyricContrast.UseDark(.18f,false),"Hysteresis retains light near crossover");
+Check(PeakDangoMusic.LyricContrast.UseDark(.18f,true),"Hysteresis retains dark near crossover");
+Check(Math.Abs(PeakDangoMusic.LyricContrast.Luminance(1,1,1)-1)<.0001,"White luminance");
+Check(PeakDangoMusic.LyricContrast.Luminance(0,0,0)==0,"Black luminance");
+for(int level=0;level<=100;level++)
+{
+    float l=level/100f;
+    foreach(bool previous in new[]{true,false})
+    {
+        bool dark=PeakDangoMusic.LyricContrast.UseDark(l,previous);
+        float face=dark?PeakDangoMusic.LyricContrast.Luminance(.055f,.07f,.095f):PeakDangoMusic.LyricContrast.Luminance(1,.96f,.91f);
+        double ratio=(Math.Max(l,face)+.05)/(Math.Min(l,face)+.05);
+        Check(ratio>=3.8,"Contrast across grayscale with hysteresis");
+    }
+}
+Console.WriteLine($"Total including contrast checks: {checks}");
+
+Check(PeakDangoMusic.LyricContrast.IsDay(12,5,21),"Daytime");
+Check(!PeakDangoMusic.LyricContrast.IsDay(0,5,21),"Nighttime");
+Check(PeakDangoMusic.LyricContrast.IsDay(5,5,21),"Inclusive dawn");
+Check(!PeakDangoMusic.LyricContrast.IsDay(21,5,21),"Exclusive dusk");
+Check(PeakDangoMusic.LyricContrast.IsDay(36,5,21),"Modulo day time");
+Check(PeakDangoMusic.LyricContrast.IsDay(23,21,5),"Midnight crossing");
+foreach(bool day in new[]{true,false})foreach(bool manual in new[]{true,false})
+{
+ Check(PeakDangoMusic.LyricContrast.Resolve(true,manual,day)==day,"Automatic ignores manual");
+ Check(PeakDangoMusic.LyricContrast.Resolve(false,manual,day)==manual,"Manual ignores clock");
+}
+Console.WriteLine($"Total including day/night modes: {checks}");

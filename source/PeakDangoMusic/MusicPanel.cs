@@ -213,6 +213,10 @@ public static class MusicPanel
         Toggle("智能防离屏（原项目默认关）",s.Smart);
         Toggle("固定跟随视角（扩展，默认关）",s.Follow);
         GUILayout.Space(12);
+        Toggle("昼夜自动字色（白天深／夜晚浅）",s.AutoDayNight);
+        bool colorEnabled=GUI.enabled;GUI.enabled=colorEnabled&&!s.AutoDayNight.Value;
+        Toggle("手动使用深色字（关闭为浅色）",s.ManualDark);GUI.enabled=colorEnabled;
+        GUILayout.Label("两种字色均保留光晕；字色不随靠近、视角或天气变化。",hint);
         Slider("文字亮度",s.Brightness,1,6,"F1");
         Slider("缩放倍率",s.FontSize,.5f,3,"F1");Slider("歌词距离",s.Distance,3,40,"F1");
         Slider("左右散布角",s.Spread,0,60,"F0");
@@ -231,7 +235,7 @@ public static class MusicPanel
         int preset=PresetGrid(-1,EffectPresets,true);
         if(preset>=0)s.ApplyPreset(preset);
         GUILayout.Space(24);SectionTitle("文字动画");
-        Toggle("白色光晕",s.Glow);Toggle("逐字弹出",s.Pop);
+        Toggle("文字光晕（深浅字均生效）",s.Glow);Toggle("逐字弹出",s.Pop);
         s.GlowColor.Value=NamedSelection("光晕颜色",s.GlowColor.Value,new[]{"随字色","粉色","蓝色","金色"});
         Slider("光晕强度",s.GlowStrength,0,3,"F2");Slider("光晕半径",s.GlowRadius,0,1,"F2");
         GUILayout.Space(24);SectionTitle("文字抖动");

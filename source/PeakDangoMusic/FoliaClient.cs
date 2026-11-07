@@ -19,13 +19,14 @@ internal sealed class FoliaClient : IDisposable
         internal readonly int Offset,Quality,Fps;
         internal readonly float FontScale;
         internal int Revision;
-        internal Request(MusicState state,MusicSettings settings)
+        internal Request(MusicState state,MusicSettings settings,AdaptiveLyrics.Palette palette)
         {
             FontPath=settings.FontPath.Value;State=state;Mode=FoliaStyles.Resolve(settings.Style.Value,state.Key);Enabled=settings.Enabled.Value;
             Translation=settings.Translation.Value;Split=settings.SplitLines.Value;Background=settings.FoliaBackground.Value;Software=settings.FoliaSoftware.Value;
             Offset=settings.Offset.Value;Quality=settings.FoliaQuality.Value;Fps=settings.FoliaFps.Value;FontScale=settings.FoliaFontScale.Value;
             Intensity=settings.FoliaIntensity.Value switch{0=>"calm",2=>"chaotic",_=>"normal"};
-            Primary="#F7E1D7";Accent=settings.GlowColor.Value switch{1=>"#FF82B5",2=>"#76BBFF",3=>"#F4C676",_=>"#69D7D1"};
+            Primary=Background?"#F7E1D7":"#"+UnityEngine.ColorUtility.ToHtmlStringRGB(palette.Face);Accent=settings.GlowColor.Value switch{1=>"#FF82B5",2=>"#76BBFF",3=>"#F4C676",_=>"#69D7D1"};
+            if(!Background&&palette.IsDark)Accent="#234D59";
         }
     }
     internal sealed class Frame
