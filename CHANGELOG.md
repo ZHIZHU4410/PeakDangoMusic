@@ -1,5 +1,57 @@
 # Changelog
 
+## 2.1.1 (2026-11-09)
+- Fix rejection of original Kugou KRCs whose final row mistakenly stores the full song length as its duration (reproduced with 雨爱). Bound only the final hold when all original word timings fit the playing track; preserve every word timestamp. Continue rejecting genuinely late words and corrupt earlier rows.
+- Add six duration regression checks; 305 assertions pass.
+
+## 2.1.0 (2026-11-09)
+- Restore Kugou/QQMusic desktop synchronization entries on the 2.0.6 baseline; saved source2/3 now activates the chosen player again.
+- Preserve MusicWindow input recovery and 2.0.5 pause/clock hold. Stabilize artist identity when SMTC alternates partial singer lists.
+- Add QQ-native public catalog, LRC and translation lookup before backup catalog matching, following RunicMite and Sorihiko source-layer design. No login/audio playback features are added.
+- Keep Kugou local KRC/LRC priority, buffered background sampling and independent200ms stdout heartbeat.
+- Remove Kugou UI Automation entirely. Use its native read-only status API over persistent loopback CDP, with 4.4s sampling, one in-flight request and 30s failure cooldown. Ship a Windows PowerShell-compatible launcher using `--remote_debug_port=9225`.
+- QQ desktop client is not installed here; public HTTP and parsing tests do not substitute for client/game acceptance.
+
+
+## 2.0.6 (2026-11-09)
+- Temporarily hide the KuGou Music and QQ Music source entries in the settings panel; only BLF/LX and NetEase Cloud Music are shown. All KuGou/QQ code, bridge paths, KRC cache reading and public lyric matching remain in the build.
+- Existing configs with source 2/3 fall back to BLF/LX at startup without deleting or narrowing the stored value; the config range stays 0–3 so the entries can be restored later by changing the visible option list only.
+- Complete runtime package rebuilt with the 2.0.5 KuGou progress hold and the current bridge.
+
+## 2.0.5 (2026-11-09)
+- KuGou: fix the "lyrics show for a while then disappear" connection gap. The bridge now holds the last valid metadata/progress and keeps the last real clock advancing until the track ends, instead of nulling the position after a 2–3 second UI Automation/SMTC gap.
+- Accept an empty artist in KuGou samples, seed an unknown new-track clock at zero only once, and freeze/resume at the extrapolated position rather than at the old raw sample.
+- Verified the hold logic with a standalone probe (10s/60s extrapolation, null-position sample, pause freeze). The official KuGou 20.1 CEF build does not expose a CDP port (tested 9222 and local 8020), so the NetEase-style `--remote-debugging-port` route is not available for the stock client; SMTC + UI Automation with extrapolation is the reliable path.
+- Lyrics mapping remains local KRC cache first, then public search; no change to the matching policy.
+
+## 2.0.4 (2026-11-09)
+- Replace the temporary EventSystem input-module pause with a non-invasive full-screen raycast blocker plus `sendNavigationEvents=false`: the native EventSystem and its module stay enabled for PEAK and every other mod.
+- Keep the 2.0.3 guarantees: no `Time.timeScale`/`Cursor` writes, close request consumed outside OnGUI, owner-loss and 3-second no-draw watchdogs, draw exceptions logged instead of blocking close.
+- Only call legacy `UnityEngine.Input` while the modal is open and the new Input System keyboard is missing, avoiding per-frame exceptions in new-input-only projects.
+- Fix the "settings modal leaves every gameplay interaction key dead" report without touching any global UI/input component.
+
+## 2.0.3 (2026-11-09)
+- Fix the settings modal leaving PEAK's gameplay interaction keys dead after it was opened from Options and closed: the modal no longer disables the native EventSystem, and never changes Time.timeScale or Cursor state (both are owned by PEAK).
+- Pause only the EventSystem input module while the modal is open and restore it on close; keep EventSystem.current valid for the game's navigation handlers.
+- Process the close button outside OnGUI, add an owner-loss watchdog and a 3-second "modal cannot draw" watchdog so an IMGUI/layout failure can never keep CharacterInput blocked.
+- Catch panel drawing exceptions, clear IMGUI keyboard focus, and log open/close for future diagnosis.
+
+
+## 2.0.1 (2026-11-09)
+- Prefer matching local Kugou KRC/LRC lyrics before cross-catalog search. Decode the user's own cache in memory and retain word timings; never redistribute lyrics.
+- Automatically discover KuGou/Lyric on fixed disks, with an optional cache-folder setting. Verify title/artist/version and reject conflicting cached timelines.
+- Fix the screenshot examples: local caches yield 49, 37 and 58 synchronized rows respectively. Cross-platform singer/catalog differences no longer block these songs.
+- Separate absent local/public matches from the earlier misleading generic ambiguity message.
+
+
+## 2.0.0 (2026-11-09)
+- Add isolated Kugou and QQMusic media-session sources while preserving BLF/LX and NetEase source ids.
+- Add Kugou 20.1 UI Automation 3 progress fallback for its zero SMTC timeline, including song-detail view. Read-only centisecond conversion, metadata cross-check, and pause state from SMTC.
+- Use conservative public lyric matching; never invoke a paid LX source script or include its key.
+- Four source choices use a two-column grid. Existing day/night colors and independent glow are retained.
+- Kugou live chain: 28 valid position packets and 60 synchronized lyric lines. QQMusic not installed, so only routing and isolation tests; valid SMTC timeline required.
+
+
 ## 1.3.5 (2026-11-07)
 - Replace background sampling with one global game-clock decision: dark during the game-defined daytime, light at night.
 - Add an automatic day/night toggle and manual dark/light override in display settings.

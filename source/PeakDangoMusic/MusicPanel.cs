@@ -22,7 +22,7 @@ public static class MusicPanel
     const float RowLabelWidth=144,ValueWidth=96,ControlGap=12;
     static readonly string[] Modes={"整句","单词","逐字（整句）"};
     static readonly string[] Tabs={"歌词显示与位置","动画与效果","Folia歌词样式","字体"};
-    static readonly string[] Sources={"BLF / LX","原版网易云"};
+    static readonly string[] Sources={"BLF / LX","原版网易云","酷狗音乐","QQ音乐"};
     static readonly string[] EffectPresets={"原项目默认","轻柔漂浮","活泼弹跳","静态清晰"};
     static readonly string[] Entrance={"淡入","上浮","弹入","直接"},Exit={"淡出","上浮","缩小","直接"};
     internal static void ResetEntrance()=>entranceAt=-1;
@@ -106,7 +106,8 @@ public static class MusicPanel
     {
         var s=plugin.Settings;
         SectionTitle("播放器连接");
-        s.Source.Value=NamedSelection("播放器来源",s.Source.Value,Sources);GUILayout.Space(24);
+        GUILayout.Label("播放器来源",hint);
+        PresetGrid(s.EffectiveSource,Sources,false,value=>s.Source.Value=value);GUILayout.Space(24);
         SectionTitle("播放状态");
         Toggle("启用漂浮歌词",s.Enabled);
         var state=plugin.Client.Snapshot;
@@ -122,12 +123,23 @@ public static class MusicPanel
         }
         if(state.Title.Length>0)
         {
-            GUILayout.Label(BalancedTitle(state.Title+" — "+state.Artist));
+            GUILayout.Label(new GUIContent(BalancedTitle(state.Title+" — "+state.Artist)));
             long position=state.PositionAt(MusicClock.Now)??state.PositionMs;
-            GUILayout.Label((state.Playing?"播放中  ":"已暂停  ")+TimeText(position)+" / "+TimeText(state.DurationMs),valueStyle);
+            GUILayout.Label(new GUIContent((state.Playing?"播放中  ":"已暂停  ")+TimeText(position)+" / "+TimeText(state.DurationMs)),valueStyle);
         }
         GUILayout.Space(24);SectionTitle("连接设置");
-        if(s.Source.Value==1)
+        if(s.EffectiveSource>=2)
+        {
+            string name=s.EffectiveSource==2?"酷狗音乐":"QQ音乐";
+            GUILayout.Label(s.EffectiveSource==2?"通过酷狗本机播放接口同步，不扫描播放器控件。":"读取QQ音乐的系统媒体会话与进度。",hint);
+            GUILayout.Label(s.EffectiveSource==2?"酷狗优先读取本机KRC原版逐字歌词，再尝试公开曲库。":"QQ音乐优先匹配本平台同步歌词；接口无结果时尝试备用曲库。",hint);
+            if(s.EffectiveSource==2){GUILayout.Label("酷狗歌词缓存目录（留空自动查找）",hint);s.KugouLyricsFolder.Value=GUILayout.TextField(s.KugouLyricsFolder.Value,GUILayout.MinHeight(40));}
+            if(Button("重新连接"+name))plugin.Client.Reconnect();
+            GUILayout.Label(s.EffectiveSource==2?"先完全退出酷狗，再运行安装包内“启动酷狗歌词连接.cmd”，打开推荐页并播放。":"QQ音乐需提供有效系统媒体会话进度。",hint);
+            if(s.EffectiveSource==3)GUILayout.Label("QQ音乐尚未在本机安装，当前适配待实机验证。",hint);
+            return;
+        }
+        if(s.EffectiveSource==1)
         {
             GUILayout.Label("读取原版网易云的 Windows 媒体信息与本机播放进度，歌词由网易云公开接口获取。",hint);
             GUILayout.Space(10);
@@ -374,7 +386,7 @@ public static class MusicPanel
         var texture=new Texture2D(1,1,TextureFormat.RGBA32,false){wrapMode=TextureWrapMode.Clamp};
         texture.SetPixel(0,0,fill);texture.Apply();return texture;
     }
-    static int PresetGrid(int selected,string[] labels,bool momentary=false)
+    static int PresetGrid(int selected,string[] labels,bool momentary=false,Action<int>? onPick=null)
     {
         const int columns=2;
         const float columnGap=12,rowGap=8,rowHeight=48;
@@ -389,7 +401,7 @@ public static class MusicPanel
         {
             var cell=new Rect(area.x+(i%columns)*(width+columnGap),area.y+(i/columns)*(rowHeight+rowGap),width,rowHeight);
             if(GUI.Button(cell,labels[i],!momentary&&selected==i?selectedPresetStyle!:presetStyle!))
-            {result=i;SetFeedback("已选择："+labels[i]);}
+            {result=i;SetFeedback("已选择："+labels[i]);onPick?.Invoke(i);}
         }
         return result;
     }

@@ -1,8 +1,8 @@
 {
   "name": "PeakDangoMusic",
-  "version_number": "1.3.5",
+  "version_number": "2.1.1",
   "website_url": "https://github.com/ZHIZHU4410/PeakDangoMusic",
-  "description": "PEAK 全界面漂浮歌词，含Folia全部15种内置样式、本地字体选择和游戏选项入口，支持昼夜字色、手动深浅切换与独立光晕；支持BLF/LX与网易云。作者：布洛芬。",
+  "description": "PEAK 全界面漂浮歌词，含Folia全部15种内置样式、本地字体选择和游戏选项入口，支持昼夜字色与独立光晕；支持BLF/LX、网易云、酷狗本机API与QQ音乐。作者：布洛芬。",
   "dependencies": [
     "BepInEx-BepInExPack_PEAK-5.4.75301"
   ]

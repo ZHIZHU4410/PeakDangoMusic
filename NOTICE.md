@@ -29,3 +29,31 @@ This standalone PeakDangoMusic component uses GPL-3.0; LICENSE and complete buil
 2026-10-29: 1.2.1 separates bridge/preset initialization, tracks per-selection presentation frames and restores Dango on renderer errors, with bounded local diagnostics. No runtime tests, as requested.
 
 2026-10-29: 1.2.2 replaces GUI stdio transport with a private duplex named pipe after reproducing stdin EOF during hidden renderer startup. Hidden component diagnostics authorized; no game/player tests.
+
+Kugou KRC format interoperability reference: https://github.com/lyswhut/lx-music-desktop/blob/master/src/common/utils/lyricUtils/kg.js . The new reader is implemented locally; no user lyric cache files or paid source keys are bundled.
+
+2.1.0 QQ public LRC integration references: RunicMite/DangoMusic-QQMusic (GPL-3.0, commit105dcfc92e5a05744aa49a0f003be9a41c89ce4a), LyricsProvider.java; Sorihiko/DangoMusic (GPL-3.0, commit09c23ff6232359842a779f44ee2453bb1a2c4e9a), QqMusicSource.kt. Only public catalog/LRC protocol behavior is adapted; no login, cookies, audio URLs or account code is included.
+
+2.1.0 Kugou native status bridge is adapted from https://github.com/shenruyang123456/kugo-mcp (kugo_mcp/bridge.js and playback.py). Only read-only snapshot opcode864 is retained; playback controls are omitted. Its MIT license follows:
+
+MIT License
+
+Copyright (c) 2026 kugo-mcp contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -1,9 +1,7 @@
 # 源码与许可证
 
-安装包只包含使用所需的插件、运行组件、安装脚本和说明，无需安装源码或开发工具。
+2.1.1 安装包仅含插件、必要运行组件、安装脚本与许可证，源码不在安装包内。完整对应源码单独提供为 PeakDangoMusic-2.1.1-source.zip，包含插件、桥接器、Folia适配与上游源码、测试和构建脚本。
 
-1.3.5 的完整对应源码单独保存在 `PeakDangoMusic-1.3.5-source.zip`，不在安装 ZIP 内；包含插件、网易云桥接器、Folia 上游与适配源码、构建脚本及测试。需要构建或修改时使用源码包即可。插件采用 GPL-3.0，Folia 与适配部分采用 AGPL-3.0，许可与第三方声明在安装包内保留。
+项目地址：https://github.com/ZHIZHU4410/PeakDangoMusic 。2.1.1源码见仓库main分支；本次仅更新源码，不发布GitHub安装包或Release。
 
-项目地址：https://github.com/ZHIZHU4410/PeakDangoMusic
-
-1.3.5 对应源码：[版本标签](https://github.com/ZHIZHU4410/PeakDangoMusic/tree/v1.3.5) · [完整源码包](https://github.com/ZHIZHU4410/PeakDangoMusic/releases/download/v1.3.5/PeakDangoMusic-1.3.5-source.zip)。源码包独立于安装包，无需安装。
+插件采用GPL-3.0，Folia与适配部分采用AGPL-3.0；见LICENSE、FOLIA-LICENSE.txt和NOTICE.md。用户的LX音源脚本、API密钥、播放器文件、诊断日志均不在源码包或安装包内。

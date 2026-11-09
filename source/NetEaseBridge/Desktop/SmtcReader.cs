@@ -6,13 +6,14 @@ public sealed class SmtcReader
 {
     private GlobalSystemMediaTransportControlsSessionManager? manager;
 
-    public async Task<DesktopPlayback?> ReadAsync(CancellationToken ct = default, bool includeNetEase = true, bool includeLxMusic = false)
+    public Task<DesktopPlayback?> ReadAsync(CancellationToken ct = default,bool includeNetEase=true,bool includeLxMusic=false)=>ReadCore(id=>includeNetEase&&IsNetEase(id)||includeLxMusic&&IsLxMusic(id),ct);
+    public Task<DesktopPlayback?> ReadPlayerAsync(string source,CancellationToken ct=default)=>ReadCore(id=>PlayerIdentity.Matches(source,id),ct,source);
+    async Task<DesktopPlayback?> ReadCore(Func<string,bool> matches,CancellationToken ct,string source="netease")
     {
         manager ??= await GlobalSystemMediaTransportControlsSessionManager.RequestAsync().AsTask(ct);
-        var session = manager.GetSessions().Where(s => Matches(s.SourceAppUserModelId) && IsActiveStatus(s.GetPlaybackInfo().PlaybackStatus))
+        var session = manager.GetSessions().Where(s => matches(s.SourceAppUserModelId) && IsActiveStatus(s.GetPlaybackInfo().PlaybackStatus))
             .OrderByDescending(s => s.GetPlaybackInfo().PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
             .FirstOrDefault();
-        bool Matches(string id) => includeNetEase && IsNetEase(id) || includeLxMusic && IsLxMusic(id);
         if (session == null) return null;
         var media = await session.TryGetMediaPropertiesAsync().AsTask(ct);
         if (string.IsNullOrWhiteSpace(media.Title)) return null;
@@ -30,7 +31,7 @@ public sealed class SmtcReader
             position = Math.Clamp((long)(time.Position - time.StartTime).TotalMilliseconds + (long)(advance * rate), 0, duration);
         }
         long id = 0;
-        foreach (string genre in media.Genres)
+        foreach (string genre in source=="netease"?media.Genres:Array.Empty<string>())
             if (genre.StartsWith("NCM-", StringComparison.OrdinalIgnoreCase) && long.TryParse(genre.AsSpan(4), out long parsed) && parsed > 0) { id = parsed; break; }
         return new(media.Title.Trim(), media.Artist.Trim(), id, position, duration, playing, Environment.TickCount64, "SMTC");
     }

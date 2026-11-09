@@ -7,7 +7,7 @@ internal sealed class MusicSettings
     internal readonly ConfigEntry<bool> AutoDayNight,ManualDark,Enabled,Translation,Glow,Pop,Wiggle,AllowWalls,BehindPlayer,Smart,Follow,FacePlayer,KeepAway,AboveGround,SplitLines;
     internal readonly ConfigEntry<int> Port,Mode,Frequency,Offset,Entrance,Exit,Source,NetEasePort,GlowColor;
     internal readonly ConfigEntry<float> FontSize,Distance,Amount,Brightness,Spread,GlowStrength,GlowRadius;
-    internal readonly ConfigEntry<string> PlayerPath,FontFolder,FontPath;
+    internal readonly ConfigEntry<string> PlayerPath,FontFolder,FontPath,KugouLyricsFolder;
     internal readonly ConfigEntry<string> Style;
     internal readonly ConfigEntry<int> FoliaPlacement,FoliaQuality,FoliaFps,FoliaIntensity;
     internal readonly ConfigEntry<float> FoliaSize,FoliaOpacity,FoliaFontScale;
@@ -15,9 +15,10 @@ internal sealed class MusicSettings
     internal MusicSettings(ConfigFile config)
     {
         Enabled=config.Bind("连接","启用漂浮歌词",true,"在游戏选项的悬浮歌词菜单中显示或隐藏歌词；播放器自行播放，模组只读同步。");
-        Source=config.Bind("连接","播放器来源",0,new ConfigDescription("0=BLF/LX本机API；1=原版网易云（Windows媒体接口与本机进度接口）。",new AcceptableValueRange<int>(0,1)));
+        Source=config.Bind("连接","播放器来源",0,new ConfigDescription("0=BLF/LX本机API；1=网易云；2=酷狗音乐；3=QQ音乐。",new AcceptableValueRange<int>(0,3)));
         NetEasePort=config.Bind("连接","网易云本机端口",9223,new ConfigDescription("原版网易云可选本机进度连接端口。未公开Windows播放进度时，使用包内脚本启动网易云。",new AcceptableValueRange<int>(1,65535)));
         Port=config.Bind("连接","LX本机端口",23330,new ConfigDescription("BLF / LX 设置→开放 API 的端口，仅连接127.0.0.1。",new AcceptableValueRange<int>(1,65535)));
+        KugouLyricsFolder=config.Bind("连接","酷狗歌词缓存目录","","留空自动查找固定磁盘的KuGou/Lyric；也可填写酷狗设置中的歌词保存目录。只读，不复制歌词。");
         PlayerPath=config.Bind("连接","播放器路径","","可选：填写你自己的 BLF/LX exe 路径，仅用于打开播放器按钮；手动打开播放器无需设置。");
         FontFolder=config.Bind("字体","字体素材目录",@"D:\BaiduNetdiskDownload\字体搭配2.0 by阳春落羽","递归读取本地TTF、OTF、TTC字体，不安装或复制素材。");
         FontPath=config.Bind("字体","歌词字体文件","","留空使用系统默认；悬浮歌词设置的字体页选择。缺失字形由系统字体补齐。");
@@ -60,6 +61,8 @@ internal sealed class MusicSettings
         Exit=config.Bind("动画","退场",1,new ConfigDescription("0淡出；1上浮；2缩小；3直接消失。",new AcceptableValueRange<int>(0,3)));
     }
     internal float WorldFontSize=>2.8f*FontSize.Value*(Distance.Value/10f);
+    // Restore the stored desktop player selection on the 2.0.6 baseline.
+    internal int EffectiveSource=>Math.Clamp(Source.Value,0,3);
     internal void ApplyOriginalDefaults()
     {
         Style.Value="dango";AutoDayNight.Value=true;ManualDark.Value=false;

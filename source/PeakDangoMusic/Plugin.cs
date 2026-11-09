@@ -12,7 +12,7 @@ namespace PeakDangoMusic;
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-    internal const string Version="1.3.5";
+    internal const string Version="2.1.1";
     internal static Plugin? Instance {get;private set;}
     internal MusicSettings Settings=null!;
     internal FontLibrary Fonts=null!;
@@ -25,6 +25,8 @@ public sealed class Plugin : BaseUnityPlugin
     MusicWindow window=null!;
     Harmony? harmony;
     internal bool BlocksPlayerInput=>window?.BlocksPlayerInput ?? false;
+    internal void Log(string message)=>Logger.LogInfo(message);
+    internal void LogError(string message)=>Logger.LogError(message);
     float saveAt=-1,previewUntil;
     long previewTick;
     long previewDuration=8000;
@@ -48,9 +50,20 @@ public sealed class Plugin : BaseUnityPlugin
     void Update()
     {
         var keyboard=Keyboard.current;
-        if(window.Open && keyboard!=null && keyboard.escapeKey.wasPressedThisFrame)window.Close();
+        bool escapePressed=keyboard!=null && keyboard.escapeKey.wasPressedThisFrame;
+        // Only touch legacy Input while the modal is open and the new Input System
+        // keyboard is unavailable; otherwise the call would throw every frame in a
+        // new-input-only project.
+        if(!escapePressed && window.Open && keyboard==null)
+            try{escapePressed=Input.GetKeyDown(KeyCode.Escape);}
+            catch(Exception){}
+        // The close button only queues a request from OnGUI; consume it here so a
+        // layout/draw exception can never leave the modal blocking gameplay input.
+        if(window.CloseRequested)window.Close();
+        else if(window.Open && escapePressed)window.Close();
         window.CheckOwner();
-        window.KeepCursor();
+        window.CheckResponsive();
+        window.KeepModalState();
         Client.Configure(Settings);
         if(saveAt>=0 && Time.unscaledTime>=saveAt){saveAt=-1;Config.Save();}
     }
@@ -84,7 +97,7 @@ public sealed class Plugin : BaseUnityPlugin
         if(screenMode){Renderer.Hide();screen.Tick(state,now);}
         else{screen.Hide();Renderer.Tick(state,camera!,now);}
     }
-    void LateUpdate(){window?.KeepCursor();TickLyrics();}
+    void LateUpdate(){window?.KeepModalState();TickLyrics();}
     void OnDisable(){window?.Close();folia?.Suspend();}
     void OnGUI(){window?.Draw();screen?.Draw();folia?.Draw();}
     internal void OpenSettings(SharedSettingsMenu owner)=>window.Show(owner);

@@ -1,6 +1,6 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace PeakDangoMusic;
 
@@ -14,38 +14,119 @@ internal sealed class MusicWindow : IDisposable
     GUISkin? skin;
     GUIStyle? heading,subtitle;
     readonly List<Texture2D> textures=new();
-    CursorLockMode previousLock;
-    bool previousVisible;
-    float previousTimeScale;
     int suppressInputUntil=-1;
     SharedSettingsMenu? owner;
     EventSystem? eventSystem;
-    bool eventSystemWasEnabled;
-    GameObject? previousSelection;
+    bool previousNavigation;
+    bool navigationCaptured;
+    GameObject? blocker;
+    bool closeRequested;
+    int lastDrawFrame=-1;
+    bool wasFocused=true;
     internal bool BlocksPlayerInput=>Open || Time.frameCount<=suppressInputUntil;
-    internal bool Pausing=>Open && SceneManager.GetActiveScene().name!="Title" && Character.localCharacter!=null && Camera.main!=null;
+    internal bool CloseRequested=>closeRequested;
+    internal void RequestClose()=>closeRequested=true;
     internal void Show(SharedSettingsMenu source)
     {
         if(Open)return;
-        owner=source;
-        eventSystem=EventSystem.current;
-        if(eventSystem!=null){eventSystemWasEnabled=eventSystem.enabled;previousSelection=eventSystem.currentSelectedGameObject;eventSystem.SetSelectedGameObject(null);eventSystem.enabled=false;}
-        previousLock=Cursor.lockState;previousVisible=Cursor.visible;previousTimeScale=Time.timeScale;Open=true;MusicPanel.ResetEntrance();KeepCursor();
+        owner=source;closeRequested=false;Open=true;suppressInputUntil=-1;MusicPanel.ResetEntrance();lastDrawFrame=Time.frameCount;wasFocused=Application.isFocused;
+        SuspendNativeUI();
     }
-    internal void CheckOwner(){if(Open && (owner==null || !owner.isActiveAndEnabled))Close();}
+    // Never disable the EventSystem or its input module: other mods and PEAK's own
+    // navigation handlers keep working. A top-most raycast blocker consumes native
+    // UI clicks, and sendNavigationEvents is paused only for this modal.
+    void SuspendNativeUI()
+    {
+        eventSystem=EventSystem.current;
+        if(eventSystem!=null && !navigationCaptured)
+        {
+            previousNavigation=eventSystem.sendNavigationEvents;
+            navigationCaptured=true;
+            eventSystem.sendNavigationEvents=false;
+        }
+        CreateBlocker();
+    }
+    void CreateBlocker()
+    {
+        if(blocker!=null)return;
+        try
+        {
+            blocker=new GameObject("DangoMusic Input Blocker",typeof(RectTransform),typeof(Canvas),typeof(GraphicRaycaster));
+            UnityEngine.Object.DontDestroyOnLoad(blocker);
+            var canvas=blocker.GetComponent<Canvas>();
+            canvas.renderMode=RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder=32767;
+            var surface=new GameObject("Surface",typeof(RectTransform),typeof(CanvasRenderer),typeof(Image));
+            surface.transform.SetParent(blocker.transform,false);
+            var rect=(RectTransform)surface.transform;
+            rect.anchorMin=Vector2.zero;rect.anchorMax=Vector2.one;rect.offsetMin=rect.offsetMax=Vector2.zero;
+            var image=surface.GetComponent<Image>();
+            image.color=new Color(0,0,0,0.001f);
+            image.raycastTarget=true;
+        }
+        catch(Exception ex){Plugin.Instance?.LogError("DangoMusic 输入遮挡层创建失败："+ex.Message);}
+    }
+    void DestroyBlocker()
+    {
+        if(blocker!=null){UnityEngine.Object.Destroy(blocker);blocker=null;}
+    }
+    internal void KeepModalState()
+    {
+        if(!Open)return;
+        if(eventSystem==null)
+        {
+            eventSystem=EventSystem.current;
+            if(eventSystem!=null && !navigationCaptured){previousNavigation=eventSystem.sendNavigationEvents;navigationCaptured=true;}
+        }
+        if(eventSystem!=null)eventSystem.sendNavigationEvents=false;
+        CreateBlocker();
+    }
+    internal void CheckOwner()
+    {
+        if(!Open)return;
+        if(owner==null || !owner.isActiveAndEnabled)Close();
+    }
+    // A modal that cannot draw for three focused seconds is not usable: release its
+    // input block instead of leaving gameplay dead until the game is restarted.
+    internal void CheckResponsive()
+    {
+        if(!Open)return;
+        if(!Application.isFocused){wasFocused=false;lastDrawFrame=Time.frameCount;return;}
+        if(!wasFocused){wasFocused=true;lastDrawFrame=Time.frameCount;return;}
+        if(Time.frameCount-lastDrawFrame>180)
+        {
+            Plugin.Instance?.LogError("DangoMusic 设置界面 3 秒未绘制，已自动关闭并恢复输入。");
+            Close();
+        }
+    }
     internal void Close()
     {
         if(!Open)return;
-        Open=false;Time.timeScale=previousTimeScale;Cursor.lockState=previousLock;Cursor.visible=previousVisible;
-        if(eventSystem!=null){eventSystem.enabled=eventSystemWasEnabled;if(previousSelection!=null && previousSelection.activeInHierarchy)eventSystem.SetSelectedGameObject(previousSelection);}
-        eventSystem=null;previousSelection=null;owner=null;
-        suppressInputUntil=Time.frameCount+1;
-        Plugin.Instance?.Config.Save();
+        Open=false;closeRequested=false;
+        try
+        {
+            // Time scale and cursor stay owned by PEAK's pause menu/CursorHandler.
+            // Only the temporary raycast blocker and navigation pause are undone here.
+            if(navigationCaptured && eventSystem!=null)eventSystem.sendNavigationEvents=previousNavigation;
+            DestroyBlocker();
+        }
+        finally
+        {
+            navigationCaptured=false;eventSystem=null;owner=null;
+            suppressInputUntil=Time.frameCount+1;
+            GUI.FocusControl(null);
+            try{Plugin.Instance?.Config.Save();}
+            catch(Exception ex){Plugin.Instance?.Log("DangoMusic 设置保存失败："+ex.Message);}
+            var gui=GUIManager.instance;
+            Plugin.Instance?.Log("DangoMusic 设置已关闭，游戏输入已恢复。timeScale="+Time.timeScale.ToString("F2")
+                +" pauseMenu="+GUIManager.InPauseMenu+" windowBlockingInput="+(gui!=null && gui.windowBlockingInput)
+                +" eventSystem="+(EventSystem.current!=null)+" cursor="+Cursor.lockState);
+        }
     }
-    internal void KeepCursor(){if(Open){if(Pausing)Time.timeScale=0;Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}}
     internal void Draw()
     {
         if(!Open)return;
+        lastDrawFrame=Time.frameCount;
         var original=GUI.skin;
         var previousMatrix=GUI.matrix;var previousColor=GUI.color;var previousContentColor=GUI.contentColor;var previousBackgroundColor=GUI.backgroundColor;int previousDepth=GUI.depth;
         if(skin==null)
@@ -100,13 +181,16 @@ internal sealed class MusicWindow : IDisposable
     {
         GUILayout.BeginHorizontal();GUILayout.BeginVertical();
         GUILayout.Label("DangoMusic · 漂浮歌词",heading);
-        GUILayout.Label((Pausing?"本机游戏已暂停":"歌词设置")+"  ·  设置自动保存  ·  v"+Plugin.Version+(MusicPanel.Feedback.Length>0?"  ·  "+MusicPanel.Feedback:""),subtitle);
+        GUILayout.Label("歌词设置  ·  设置自动保存  ·  v"+Plugin.Version+(MusicPanel.Feedback.Length>0?"  ·  "+MusicPanel.Feedback:""),subtitle);
         GUILayout.EndVertical();
         bool close=GUILayout.Button("返回选项  ·  Esc",GUILayout.Width(220),GUILayout.Height(48));
+        // Record the request before drawing the panel. A layout exception in the
+        // panel can then no longer strand the modal in the open(input-blocking) state.
+        if(close)RequestClose();
         GUILayout.EndHorizontal();GUILayout.Space(18);
-        MusicPanel.DrawStandalone(rect.width-48);
+        try{MusicPanel.DrawStandalone(rect.width-48);}
+        catch(Exception ex){Plugin.Instance?.LogError("DangoMusic 设置界面绘制失败："+ex);}
         GUI.DragWindow(new Rect(0,0,Mathf.Max(0,rect.width-270),90));
-        if(close)Close();
     }
     Texture2D Background(Color color)
     {

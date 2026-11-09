@@ -45,10 +45,10 @@ def main():
         shutil.copy2(ROOT / 'packaging/安装说明.md', stage / '安装说明.md')
         readme=stage / 'README.md'
         readme.write_text(readme.read_text(encoding='utf-8').replace('(packaging/安装说明.md)', '(安装说明.md)'),encoding='utf-8')
-        for name in ['Install.ps1', 'Start-NetEaseLyrics.ps1']:
+        for name in ['Install.ps1', 'Start-NetEaseLyrics.ps1', 'Start-KugouLyrics.ps1']:
             text = (ROOT / 'packaging' / name).read_text(encoding='utf-8-sig')
             (stage / name).write_text(text, encoding='utf-8-sig')
-        for name, script, extra in [('一键安装.cmd', 'Install.ps1', ''), ('卸载歌词.cmd', 'Install.ps1', ' -Uninstall'), ('启动网易云歌词连接.cmd', 'Start-NetEaseLyrics.ps1', '')]:
+        for name, script, extra in [('一键安装.cmd', 'Install.ps1', ''), ('卸载歌词.cmd', 'Install.ps1', ' -Uninstall'), ('启动网易云歌词连接.cmd', 'Start-NetEaseLyrics.ps1', ''), ('启动酷狗歌词连接.cmd', 'Start-KugouLyrics.ps1', '')]:
             command = '@echo off\r\npowershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0' + script + '"' + extra + ' %*\r\nset "result=%ERRORLEVEL%"\r\necho.\r\npause\r\nexit /b %result%\r\n'
             (stage / name).write_bytes(command.encode('ascii'))
         if args.include_source:

@@ -15,6 +15,7 @@ backups/
 *.cfg
 *.zip
 Config.Build.user.props
+MODLOG.md
 **/node_modules/
 **/.cache/
 source/FoliaRenderer/dist/

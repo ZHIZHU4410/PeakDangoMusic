@@ -14,18 +14,22 @@ internal sealed class NativeMusicClient : IDisposable
     readonly object gate=new();
     Process? child;
     volatile MusicState state=new(message:"等待原版网易云音乐");
-    int enabled,port=9223,epoch;
+    int enabled,port=9223,epoch,source=1;
+    string lyricsFolder="";
+    string Player=>Volatile.Read(ref source) switch{2=>"酷狗音乐",3=>"QQ音乐",_=>"原版网易云音乐"};
     internal MusicState Snapshot=>state;
     internal NativeMusicClient(){worker=Task.Run(Run);}
-    internal void Configure(int nextPort,bool active)
+    internal void Configure(int nextPort,bool active,int nextSource=1,string nextFolder="")
     {
-        bool changed=Interlocked.Exchange(ref port,nextPort)!=nextPort;
+        bool folderChanged=lyricsFolder!=nextFolder;lyricsFolder=nextFolder;
+        bool changed=folderChanged;changed|=Interlocked.Exchange(ref source,nextSource)!=nextSource;
+        changed|=Interlocked.Exchange(ref port,nextPort)!=nextPort;
         changed|=Interlocked.Exchange(ref enabled,active?1:0)!=(active?1:0);
         if(changed)Reconnect();
     }
     internal void Reconnect()
     {
-        Interlocked.Increment(ref epoch);state=new MusicState(message:"正在连接原版网易云音乐");StopChild();
+        Interlocked.Increment(ref epoch);state=new MusicState(message:"正在连接"+Player);StopChild();
     }
     void StopChild()
     {
@@ -40,11 +44,11 @@ internal sealed class NativeMusicClient : IDisposable
                 if(Volatile.Read(ref enabled)==0){await Task.Delay(400,lifetime.Token).ConfigureAwait(false);continue;}
                 int currentEpoch=Volatile.Read(ref epoch);
                 string path=Path.Combine(Path.GetDirectoryName(typeof(Plugin).Assembly.Location)!,"PeakDangoMusic","Native","PeakNeteaseBridge.exe");
-                if(!File.Exists(path)){state=new MusicState(message:"缺少网易云连接组件，请完整安装新版安装包");await Task.Delay(2500,lifetime.Token).ConfigureAwait(false);continue;}
+                if(!File.Exists(path)){state=new MusicState(message:"缺少播放器连接组件，请完整安装2.0安装包");await Task.Delay(2500,lifetime.Token).ConfigureAwait(false);continue;}
                 Process? process=null;
                 try
                 {
-                    process=new Process{StartInfo=new ProcessStartInfo(path,Process.GetCurrentProcess().Id+" "+Volatile.Read(ref port))
+                    process=new Process{StartInfo=new ProcessStartInfo(path,Process.GetCurrentProcess().Id+" "+Volatile.Read(ref port)+" "+(Volatile.Read(ref source) switch{2=>"kugou",3=>"qqmusic",_=>"netease"})+" \""+lyricsFolder.Replace("\"","").TrimEnd('\\')+"\"")
                     {UseShellExecute=false,CreateNoWindow=true,WindowStyle=ProcessWindowStyle.Hidden,RedirectStandardOutput=true,StandardOutputEncoding=new UTF8Encoding(false),WorkingDirectory=Path.GetDirectoryName(path)!}};
                     lock(gate)
                     {
@@ -75,8 +79,8 @@ internal sealed class NativeMusicClient : IDisposable
                         state=new MusicState((bool?)data["connected"]??false,valid?key:"",Text(data,"title",512),Text(data,"artist",512),position??0,duration,(bool?)data["playing"]??false,MusicClock.Now,1,timeline,(int?)data["generation"]??0,Text(data,"message",1024));
                     }
                 }
-                catch(Exception ex) when(ex is IOException || ex is JsonException || ex is InvalidOperationException || ex is System.ComponentModel.Win32Exception || ex is ArgumentException || ex is OverflowException)
-                {if(currentEpoch==Volatile.Read(ref epoch))state=new MusicState(message:"网易云连接组件暂不可用，正在重试；可查看安装说明");}
+                catch(Exception ex) when(ex is TimeoutException || ex is IOException || ex is JsonException || ex is InvalidOperationException || ex is System.ComponentModel.Win32Exception || ex is ArgumentException || ex is OverflowException)
+                {if(currentEpoch==Volatile.Read(ref epoch))state=new MusicState(message:Player+"连接组件暂不可用，正在重试；可查看安装说明");}
                 finally
                 {
                     lock(gate){if(child==process){StopChild();child=null;}}
@@ -90,7 +94,9 @@ internal sealed class NativeMusicClient : IDisposable
     static async Task<string?> ReadLineBounded(StreamReader reader,CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        string? text=await reader.ReadLineAsync().ConfigureAwait(false);
+        var read=reader.ReadLineAsync();
+        if(await Task.WhenAny(read,Task.Delay(5000,token)).ConfigureAwait(false)!=read){token.ThrowIfCancellationRequested();throw new TimeoutException("播放器组件心跳超时");}
+        string? text=await read.ConfigureAwait(false);
         if(text?.Length>4*1024*1024)throw new InvalidDataException();
         return text;
     }
