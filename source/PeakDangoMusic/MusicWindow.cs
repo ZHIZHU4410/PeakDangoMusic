@@ -190,6 +190,13 @@ internal sealed class MusicWindow : IDisposable
         GUILayout.EndHorizontal();GUILayout.Space(18);
         try{MusicPanel.DrawStandalone(rect.width-48);}
         catch(Exception ex){Plugin.Instance?.LogError("DangoMusic 设置界面绘制失败："+ex);}
+        // Keep the footer outside the scrolling settings so it stays at bottom left.
+        GUILayout.Space(10);
+        GUILayout.BeginHorizontal();
+        if(GUILayout.Button(new GUIContent("支持我","在浏览器中打开布洛芬的爱发电主页"),GUILayout.Width(128),GUILayout.Height(40)))
+            Application.OpenURL("https://afdian.com/a/blf4410");
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
         GUI.DragWindow(new Rect(0,0,Mathf.Max(0,rect.width-270),90));
     }
     Texture2D Background(Color color)

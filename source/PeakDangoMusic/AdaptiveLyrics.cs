@@ -16,7 +16,6 @@ internal sealed class AdaptiveLyrics : IDisposable
     {
         internal bool IsDark {get;private set;}
         internal Color Face=>IsDark?Dark:Light;
-        internal Color Outline=>IsDark?new Color(1,1,1,.8f):new Color(.01f,.015f,.025f,.95f);
         internal void Update(Vector2 unused)
         {
             var s=Plugin.Instance?.Settings;

@@ -11,7 +11,6 @@ namespace PeakDangoMusic;
 internal sealed class LegacyWorldLyrics : IDisposable
 {
     readonly AdaptiveLyrics.Palette palette=new();
-    TextMesh? outline,translationOutline;
     readonly MusicSettings settings;readonly ManualLogSource log;
     Font? font;GameObject? root;TextMesh? original,translation;
     Vector3 viewport;
@@ -29,7 +28,7 @@ internal sealed class LegacyWorldLyrics : IDisposable
         {
             font=Font.CreateDynamicFontFromOSFont(new[]{"Microsoft YaHei","Malgun Gothic","Arial"},64);if(font==null)return false;
             root=new GameObject("DangoMusic compatible world lyrics");UnityEngine.Object.DontDestroyOnLoad(root);
-            original=Text("Original");translation=Text("Translation");outline=Text("Outline");translationOutline=Text("Translation outline");translation.transform.localPosition=new Vector3(0,-.55f,0);
+            original=Text("Original");translation=Text("Translation");translation.transform.localPosition=new Vector3(0,-.55f,0);
             log.LogInfo("漂浮歌词已启用原生动态字体兼容渲染。");return true;
         }
         catch(Exception e){log.LogWarning("兼容文字字体加载失败: "+e.Message);return false;}
@@ -91,14 +90,6 @@ internal sealed class LegacyWorldLyrics : IDisposable
             }
             string painted=text.ToString();if(painted!=lastPaint){original.text=painted;lastPaint=painted;}
             translation.text=settings.Translation.Value?Wrap(selected.Translation,32):"";translation.color=palette.Face;
-            if(outline!=null && translationOutline!=null)
-            {
-                outline.text=painted.Replace(ColorUtility.ToHtmlStringRGB(palette.Face),ColorUtility.ToHtmlStringRGB(palette.Outline));
-                outline.characterSize=original.characterSize;outline.color=Color.white;
-                outline.transform.localPosition=new Vector3(.012f*factor,-.012f*factor,.006f);
-                translationOutline.text=translation.text;translationOutline.color=palette.Outline;translationOutline.characterSize=translation.characterSize;
-                translationOutline.transform.localPosition=translation.transform.localPosition+new Vector3(.012f*factor,-.012f*factor,.006f);
-            }
         }
     }
     void Place(Camera camera)

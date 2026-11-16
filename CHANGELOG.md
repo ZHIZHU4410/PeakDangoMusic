@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.3 (2026-11-16)
+- Remove hard outlines from lyric faces and translations in world, screen and compatible text rendering. Preserve the independently controlled soft glow.
+- No runtime or automated tests were run, as requested.
+
+## 2.1.2 (2026-11-13)
+- Add a fixed bottom-left 支持我 button to the lyrics settings window. Clicking opens the author's Afdian page in the default browser: https://afdian.com/a/blf4410 .
+
 ## 2.1.1 (2026-11-09)
 - Fix rejection of original Kugou KRCs whose final row mistakenly stores the full song length as its duration (reproduced with 雨爱). Bound only the final hold when all original word timings fit the playing track; preserve every word timestamp. Continue rejecting genuinely late words and corrupt earlier rows.
 - Add six duration regression checks; 305 assertions pass.

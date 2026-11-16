@@ -24,7 +24,9 @@ internal static class LyricMaterial
             if(material.HasProperty("_GlowOuter"))material.SetFloat("_GlowOuter",.08f+.42f*settings.GlowRadius.Value);
             if(glow)material.EnableKeyword("GLOW_ON");else material.DisableKeyword("GLOW_ON");
         }
-        if(material.HasProperty("_OutlineWidth")){material.SetFloat("_OutlineWidth",palette!=null?.14f:glow?.04f:0);material.EnableKeyword("OUTLINE_ON");}
-        if(material.HasProperty("_OutlineColor"))material.SetColor("_OutlineColor",palette?.Outline??white);
+        // Glyph faces have no outline; the independent soft halo remains optional.
+        if(material.HasProperty("_OutlineWidth"))material.SetFloat("_OutlineWidth",0);
+        if(material.HasProperty("_OutlineColor"))material.SetColor("_OutlineColor",Color.clear);
+        material.DisableKeyword("OUTLINE_ON");
     }
 }
