@@ -17,13 +17,13 @@ def digest(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plugin-dll', type=Path, default=ROOT / 'source/PeakDangoMusic/bin/Release/netstandard2.1/PeakDangoMusic.dll')
-    parser.add_argument('--native-exe', type=Path, default=ROOT / 'artifacts/native/PeakNeteaseBridge.exe')
+    parser.add_argument('--muonium-dir', type=Path, default=ROOT / 'artifacts/muonium')
     parser.add_argument('--folia-dir', type=Path, default=ROOT / 'artifacts/folia')
     parser.add_argument('--include-source', action='store_true', help='Also bundle development sources (not needed to install).')
     args = parser.parse_args()
     if not (args.folia_dir / 'App/dist/index.html').is_file() or not (args.folia_dir / 'Runtime/PeakFoliaRenderer.exe').is_file():
         parser.error('Missing Folia renderer output. Run build.ps1 first.')
-    for binary in [args.plugin_dll, args.native_exe]:
+    for binary in [args.plugin_dll, args.muonium_dir / "PeakMuoniumBridge.jar", args.muonium_dir / "Runtime/bin/java.exe"]:
         if not binary.is_file():
             parser.error('Missing build output: ' + str(binary) + '. Run build.ps1 first.')
     output = ROOT / 'artifacts'
@@ -32,23 +32,19 @@ def main():
     with tempfile.TemporaryDirectory(prefix='package-', dir=output) as temporary:
         stage = Path(temporary)
         plugins = stage / 'BepInEx/plugins'
-        native = plugins / 'PeakDangoMusic/Native'
-        native.mkdir(parents=True)
+        plugins.mkdir(parents=True)
         shutil.copy2(args.plugin_dll, plugins / 'PeakDangoMusic.dll')
-        shutil.copy2(args.native_exe, native / 'PeakNeteaseBridge.exe')
+        shutil.copytree(args.muonium_dir, plugins / 'PeakDangoMusic/Muonium')
         shutil.copytree(args.folia_dir, plugins / 'PeakDangoMusic/Folia')
-        for file in (ROOT / 'packaging/Native').iterdir():
-            if file.is_file():
-                shutil.copy2(file, native / file.name)
         for name in ['LICENSE', 'NOTICE.md', 'SOURCE.md', 'FOLIA-LICENSE.txt', 'FOLIA-STYLES.zh-CN.md', 'README.md', 'CHANGELOG.md', 'SORIHIKO-DEFAULTS.zh-CN.md', 'VERIFICATION.zh-CN.md', 'icon.png', 'manifest.json']:
             shutil.copy2(ROOT / name, stage / name)
         shutil.copy2(ROOT / 'packaging/安装说明.md', stage / '安装说明.md')
         readme=stage / 'README.md'
         readme.write_text(readme.read_text(encoding='utf-8').replace('(packaging/安装说明.md)', '(安装说明.md)'),encoding='utf-8')
-        for name in ['Install.ps1', 'Start-NetEaseLyrics.ps1', 'Start-KugouLyrics.ps1']:
+        for name in ['Install.ps1']:
             text = (ROOT / 'packaging' / name).read_text(encoding='utf-8-sig')
             (stage / name).write_text(text, encoding='utf-8-sig')
-        for name, script, extra in [('一键安装.cmd', 'Install.ps1', ''), ('卸载歌词.cmd', 'Install.ps1', ' -Uninstall'), ('启动网易云歌词连接.cmd', 'Start-NetEaseLyrics.ps1', ''), ('启动酷狗歌词连接.cmd', 'Start-KugouLyrics.ps1', '')]:
+        for name, script, extra in [('一键安装.cmd', 'Install.ps1', ''), ('卸载播放器.cmd', 'Install.ps1', ' -Uninstall')]:
             command = '@echo off\r\npowershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0' + script + '"' + extra + ' %*\r\nset "result=%ERRORLEVEL%"\r\necho.\r\npause\r\nexit /b %result%\r\n'
             (stage / name).write_bytes(command.encode('ascii'))
         if args.include_source:

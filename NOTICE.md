@@ -1,3 +1,15 @@
+# 2.3.0 Muonium primary-player components
+
+MuoniumPlayer native music/account services: https://github.com/zihe114514/MuoniumPlayer-multiversion , pinned9b4cc7e7bd143315da716075a6d024a0d4c0c81b, Apache-2.0. The23 retained source files and PEAK adapter are distributed in the corresponding source package. Modified files carry notices. The adapted Unity interface is implemented by PeakDangoMusic; Minecraft/Skija interface code is not embedded.
+
+Gson2.13.2 (Google Gson authors) and ZXing3.5.3 (ZXing authors) are Apache-2.0; retain their original JAR metadata and the full Apache license in Muonium/MUONIUM-APACHE-2.0.txt. Temurin OpenJDK21.0.13+9 is distributed with its NOTICE and complete Runtime/legal license tree (GPL2 with Classpath Exception and third-party notices). Exact archive origins and checksums are in Muonium/PROVENANCE.json and source/MuoniumBridge/dependencies.json.
+
+Account state is protected with Windows current-user DPAPI and is never supplied as part of a package. No game files, personal lyric caches, credentials or downloaded songs are distributed. The desktop-player/CMD connection path is retired in2.3.0; historical notes below describe prior versions.
+
+# MuoniumPlayer reference (2.2.0)
+
+Platform catalogue and GD request protocol, background sampling and bounded retries reference zihe114514/MuoniumPlayer-multiversion commit 9b4cc7e7bd143315da716075a6d024a0d4c0c81b, Apache-2.0. Adapted C# implementation by the PeakDangoMusic project. See docs/MUONIUM.md and docs/MUONIUM-APACHE-2.0.txt. Version 2.2.0 adds optional online search and local audio playback; the historical read-only statements below describe earlier versions.
+
 # PeakDangoMusic 1.3.3 packaging
 
 The installation ZIP contains runtime components, scripts, documentation and licenses. Complete corresponding source is supplied separately as PeakDangoMusic-1.3.3-source.zip; see SOURCE.md. Historical references below to bundled source describe earlier archive layouts. No source or developer tools are needed to install the mod.

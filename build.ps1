@@ -12,8 +12,8 @@ Push-Location $PSScriptRoot
 try {
     & dotnet build 'source/PeakDangoMusic/PeakDangoMusic.csproj' -c Release "-p:GameRoot=$GameRoot"
     if ($LASTEXITCODE -ne 0) { throw 'Plugin build failed.' }
-    & dotnet publish 'source/NetEaseBridge/PeakNeteaseBridge.csproj' -c Release -r win-x64 --self-contained true -o 'artifacts/native'
-    if ($LASTEXITCODE -ne 0) { throw 'NetEase helper build failed.' }
+    & python 'source/MuoniumBridge/build.py'
+    if ($LASTEXITCODE -ne 0) { throw 'Muonium account/catalogue bridge build failed. Install JDK21+ or set JAVA_HOME.' }
     $npmCommand=Get-Command npm.cmd -ErrorAction SilentlyContinue
     $npmPath=if($npmCommand){$npmCommand.Source}else{Join-Path $env:ProgramFiles 'nodejs/npm.cmd'}
     if(-not (Test-Path -LiteralPath $npmPath)){throw 'Install Node.js 24 or newer before building Folia styles.'}

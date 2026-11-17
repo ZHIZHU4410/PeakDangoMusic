@@ -20,8 +20,10 @@ public sealed class KugouApiReader : IDisposable
     DesktopPlayback? cached;
     long nextRead;
     int sequence;
+    string step="发现本机接口";
     readonly Queue<string> earlyEvents=new();
     public string Status{get;private set;}="请用包内脚本启动酷狗，打开推荐页并播放";
+    public long LastFailureTick{get;private set;}
 
     // Defer the native call until Runtime.evaluate has returned. Expired queued calls do
     // not run. Only opcode 864 (read status) is used; controls from the reference are omitted.
@@ -65,9 +67,11 @@ public sealed class KugouApiReader : IDisposable
             deadline.CancelAfter(10000);var ct=deadline.Token;
             if(socket?.State!=WebSocketState.Open)await ConnectAsync(ct).ConfigureAwait(false);
             string request=Guid.NewGuid().ToString("N");
+            step="请求原生播放状态";
             await CommandAsync("Runtime.evaluate",new{expression="window.__peakKugouBridge.begin('"+request+"',Date.now()+8000)",awaitPromise=false,returnByValue=true},ct).ConfigureAwait(false);
             while(true)
             {
+                step="等待原生状态回调";
                 using var message=earlyEvents.Count>0?JsonDocument.Parse(earlyEvents.Dequeue()):await ReceiveAsync(ct).ConfigureAwait(false);
                 var root=message.RootElement;
                 if(!root.TryGetProperty("method",out var method)||method.GetString()!="Runtime.bindingCalled")continue;
@@ -77,7 +81,8 @@ public sealed class KugouApiReader : IDisposable
                 if(payload.Length>MaximumBytes)throw new InvalidDataException();
                 using var result=JsonDocument.Parse(payload,new JsonDocumentOptions{MaxDepth=16});
                 if(!result.RootElement.TryGetProperty("id",out var id)||id.GetString()!=request)continue;
-                if(result.RootElement.TryGetProperty("error",out _))throw new InvalidDataException("Native status unavailable");
+                if(result.RootElement.TryGetProperty("error",out var failure))throw new InvalidDataException("原生接口："+failure.ToString());
+                step="解析曲名、进度与时长";
                 cached=ParseSnapshot(result.RootElement.GetProperty("result"),Environment.TickCount64);
                 Status=cached==null?"酷狗接口暂无有效播放信息":"已连接酷狗本机播放接口";
                 nextRead=Environment.TickCount64+4400;
@@ -89,7 +94,8 @@ public sealed class KugouApiReader : IDisposable
             token.ThrowIfCancellationRequested();lifetime.Token.ThrowIfCancellationRequested();
             socket?.Dispose();socket=null;cached=null;
             nextRead=Environment.TickCount64+30000;
-            Status="酷狗接口未就绪；请用包内脚本启动并打开推荐页";
+            LastFailureTick=Environment.TickCount64;
+            Status=DangoMusic.Diagnostics.FailureDetail.Describe("酷狗",step,ex)+"\n30秒后重试；请用连接脚本启动并打开推荐页";
             return null;
         }
         finally{gate.Release();}
@@ -98,15 +104,20 @@ public sealed class KugouApiReader : IDisposable
     async Task ConnectAsync(CancellationToken ct)
     {
         socket?.Dispose();socket=null;earlyEvents.Clear();
+        step="发现本机页面（127.0.0.1:"+port+"/json/list）";
         using var response=await http.GetAsync($"http://127.0.0.1:{port}/json/list",HttpCompletionOption.ResponseHeadersRead,ct).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         using var stream=await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         using var targets=await ReadJsonAsync(stream,ct).ConfigureAwait(false);
+        step="选择推荐或搜索页面";
         Uri? address=SelectTarget(targets.RootElement,port);
         if(address==null)throw new InvalidDataException("Open Kugou recommendation page");
         socket=new ClientWebSocket();socket.Options.Proxy=null;
+        step="建立页面WebSocket连接";
         await socket.ConnectAsync(address,ct).ConfigureAwait(false);
+        step="注册状态回调";
         await CommandAsync("Runtime.addBinding",new{name="__peakKugouResult"},ct).ConfigureAwait(false);
+        step="初始化只读原生接口";
         await CommandAsync("Runtime.evaluate",new{expression=InstallExpression,awaitPromise=false,returnByValue=true},ct).ConfigureAwait(false);
     }
 

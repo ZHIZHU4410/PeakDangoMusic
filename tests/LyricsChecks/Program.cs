@@ -120,7 +120,7 @@ stable.Observe(observed with{Artist="甲",PositionMs=null,SampleTick=1700},1700)
 Check(stable.Read(1700)?.Artist=="甲、乙","Partial singer metadata does not reset identity");
 Check(stable.Read(3101)?.PositionMs!=null,"Preserve 2.0.5 progress hold");
 stable.Observe(observed with{Title="下一首",PositionMs=null,SampleTick=3200},3200);
-Check(stable.Read(3200)?.Title=="下一首"&&stable.Read(3200)?.PositionMs==0,"New track uses 2.0.5 estimated start rather than old position");
+Check(stable.Read(3200)?.Title=="下一首"&&stable.Read(3200)?.PositionMs==null,"New track without clock cannot invent a start");
 Check(stable.Read(33201)==null,"Disconnected metadata expires after 30-second hold");
 stable.Observe(observed with{Playing=false,SampleTick=6000},6000);
 Check(stable.Read(6500)?.PositionAt(6500)==1000,"Pause remains frozen");
@@ -131,6 +131,12 @@ using(var isolated=new DangoMusic.Desktop.PlaybackSampler(_=>blocker.Task,Cancel
  Check(watch.ElapsedMilliseconds<500,"Hung provider never blocks sender snapshot");
  blocker.TrySetResult(null);
 }
+var expired=new DangoMusic.Desktop.PlaybackBuffer();
+expired.Observe(observed,1000);
+expired.Observe(observed with{PositionMs=null,SampleTick=32000},32000);
+Check(expired.Read(32000)?.PositionMs==null,"Repeated metadata cannot keep a stale clock alive");
+expired.Observe(observed with{PositionMs=null,Playing=false,SampleTick=32500},32500);
+Check(expired.Read(32500)?.PositionMs==null,"Pause after stale clock cannot invent a position");
 Console.WriteLine($"Stability regression assertions: {checks}");
 
 using(var qqSearch=System.Text.Json.JsonDocument.Parse("{\"code\":0,\"data\":{\"song\":{\"list\":[{\"mid\":\"goodMid123\",\"title\":\"测试歌\",\"singer\":[{\"name\":\"甲\"}],\"interval\":205},{\"mid\":\"../bad\",\"title\":\"bad\"}]}}}"))

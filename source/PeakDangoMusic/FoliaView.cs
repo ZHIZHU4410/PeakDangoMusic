@@ -38,7 +38,7 @@ internal sealed class FoliaView : IDisposable
         try{return Paint(state,camera,menu,now);}
         catch(Exception ex) when(ex is UnityException or ArgumentException or InvalidOperationException)
         {
-            fault="Folia显示暂不可用，已回退Dango："+ex.Message;retryAt=Time.unscaledTime+5;
+            fault=DiagnosticLog.Report("Folia","呈现歌词画面",ex)+"\n已回退Dango";retryAt=Time.unscaledTime+5;
             visible=overlay=false;if(root!=null)root.SetActive(false);client.Set(null);return false;
         }
     }

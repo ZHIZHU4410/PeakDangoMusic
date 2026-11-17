@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([string]$GameRoot,[switch]$Uninstall,[switch]$CheckOnly)
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
@@ -24,7 +24,7 @@ try {
     $sidecar=[IO.Path]::GetFullPath((Join-Path $plugins 'PeakDangoMusic'))
     $allowedRoot=$GameRoot.TrimEnd('\')+'\'
     if(-not $target.StartsWith($allowedRoot,[StringComparison]::OrdinalIgnoreCase) -or -not $sidecar.StartsWith($plugins+'\',[StringComparison]::OrdinalIgnoreCase)){throw '安装目标超出游戏目录。'}
-    foreach($folder in @((Join-Path $GameRoot 'BepInEx'),$plugins,$sidecar,(Join-Path $sidecar 'Native'))) {
+    foreach($folder in @((Join-Path $GameRoot 'BepInEx'),$plugins,$sidecar,(Join-Path $sidecar 'Muonium'))) {
         if((Test-Path -LiteralPath $folder) -and ((Get-Item -LiteralPath $folder).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw '安装目录是链接；请按说明手动安装到实际配置目录。'}
     }
     $backup=Join-Path $GameRoot ('BepInEx/PeakDangoMusicBackups/'+(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8))
@@ -43,8 +43,8 @@ try {
     if($duplicates.Count){throw ('请先移出重复版本：'+($duplicates.FullName -join ', '))}
     $manifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'SHA256.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $rows=@($manifest | Where-Object {$_.path.StartsWith('BepInEx/plugins/',[StringComparison]::Ordinal)})
-    if(@($rows | Where-Object {$_.path -eq 'BepInEx/plugins/PeakDangoMusic.dll'}).Count -ne 1 -or @($rows | Where-Object {$_.path -eq 'BepInEx/plugins/PeakDangoMusic/Native/PeakNeteaseBridge.exe'}).Count -ne 1){throw '安装包缺少必要组件。'}
-    foreach($required in @('BepInEx/plugins/PeakDangoMusic/Folia/Runtime/PeakFoliaRenderer.exe','BepInEx/plugins/PeakDangoMusic/Folia/App/dist/index.html')) {
+    if(@($rows | Where-Object {$_.path -eq 'BepInEx/plugins/PeakDangoMusic.dll'}).Count -ne 1 -or @($rows | Where-Object {$_.path -eq 'BepInEx/plugins/PeakDangoMusic/Muonium/PeakMuoniumBridge.jar'}).Count -ne 1){throw '安装包缺少必要组件。'}
+    foreach($required in @('BepInEx/plugins/PeakDangoMusic/Muonium/Runtime/bin/java.exe','BepInEx/plugins/PeakDangoMusic/Muonium/gson-2.13.2.jar','BepInEx/plugins/PeakDangoMusic/Muonium/zxing-core-3.5.3.jar','BepInEx/plugins/PeakDangoMusic/Folia/Runtime/PeakFoliaRenderer.exe','BepInEx/plugins/PeakDangoMusic/Folia/App/dist/index.html')) {
         if(@($rows | Where-Object {$_.path -eq $required}).Count -ne 1){throw '安装包缺少Folia歌词样式组件，请重新下载完整包。'}
     }
     foreach($row in $rows) {

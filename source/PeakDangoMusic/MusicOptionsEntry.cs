@@ -28,7 +28,7 @@ internal static class MusicOptionsEntry
         // This row opens the plugin UI instead of binding a Zorro Setting.
         cell.enabled=false;
         foreach(var localized in row.GetComponentsInChildren<LocalizedText>(true)){localized.autoSet=false;localized.enabled=false;}
-        cell.m_text.text="悬浮歌词";
+        cell.m_text.text="音乐播放器";
         if(cell.onlyOnMainMenu!=null)cell.onlyOnMainMenu.SetActive(false);
         var group=row.GetComponent<CanvasGroup>();
         if(group!=null){group.alpha=1;group.interactable=true;group.blocksRaycasts=true;}
@@ -47,7 +47,7 @@ internal static class MusicOptionsEntry
         labelObject.transform.SetParent(rect,false);
         var label=labelObject.GetComponent<TextMeshProUGUI>();
         label.font=cell.m_text.font;label.fontSharedMaterial=cell.m_text.fontSharedMaterial;
-        label.text="打开设置";label.fontSize=cell.m_text.fontSize;label.color=Color.white;
+        label.text="打开播放器";label.fontSize=cell.m_text.fontSize;label.color=Color.white;
         label.alignment=TextAlignmentOptions.Center;label.raycastTarget=false;
         label.enableAutoSizing=true;label.fontSizeMin=16;label.fontSizeMax=cell.m_text.fontSize;
         label.rectTransform.anchorMin=Vector2.zero;label.rectTransform.anchorMax=Vector2.one;

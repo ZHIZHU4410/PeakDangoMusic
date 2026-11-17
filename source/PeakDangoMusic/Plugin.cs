@@ -8,15 +8,17 @@ using UnityEngine.SceneManagement;
 
 namespace PeakDangoMusic;
 
-[BepInPlugin("local.peak.dangomusic","PEAK DangoMusic · BLF/LX 漂浮歌词",Plugin.Version)]
+[BepInPlugin("local.peak.dangomusic","PEAK DangoMusic · Muonium 音乐播放器",Plugin.Version)]
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-    internal const string Version="2.1.3";
+    internal const string Version="2.3.0";
     internal static Plugin? Instance {get;private set;}
     internal MusicSettings Settings=null!;
     internal FontLibrary Fonts=null!;
     internal MusicClient Client=null!;
+    internal AggregatePlayer Aggregate=null!;
+    internal MuoniumHub Hub=null!;
     internal WorldLyrics Renderer=null!;
     ScreenLyrics screen=null!;
     FoliaView folia=null!;
@@ -37,12 +39,14 @@ public sealed class Plugin : BaseUnityPlugin
     internal void RestartFolia()=>folia.Restart();
     void Awake()
     {
+        DiagnosticLog.Clear();DiagnosticLog.Write=message=>Logger.LogWarning(message);
+        DiagnosticLog.Clear();DiagnosticLog.Write=message=>Logger.LogWarning(message);
         AdaptiveLyrics.Current=contrast;
-        Instance=this;Config.SaveOnConfigSet=false;Settings=new MusicSettings(Config);Fonts=new FontLibrary(Settings.FontFolder.Value);Client=new MusicClient(Settings);Renderer=new WorldLyrics(Settings,Logger);screen=new ScreenLyrics(Settings);folia=new FoliaView(Settings);
+        Instance=this;Config.SaveOnConfigSet=false;Settings=new MusicSettings(Config);Fonts=new FontLibrary(Settings.FontFolder.Value);Aggregate=new AggregatePlayer(this);Client=new MusicClient(Settings,Aggregate);Hub=new MuoniumHub(this);Renderer=new WorldLyrics(Settings,Logger);screen=new ScreenLyrics(Settings);folia=new FoliaView(Settings);
         Config.SettingChanged+=Changed;
         window=new MusicWindow();
         harmony=new Harmony("local.peak.dangomusic");harmony.PatchAll(typeof(Plugin).Assembly);
-        Logger.LogInfo("DangoMusic: 游戏选项 → 悬浮歌词 → 打开设置。歌词显隐在菜单内设置。只读连接 BLF/LX 本机开放 API，默认23330。");
+        Logger.LogInfo("DangoMusic: 主菜单 → 音乐播放器，或游戏选项 → 音乐播放器。使用Muonium原生登录、曲库及GD聚合播放。");
         Logger.LogInfo("DangoMusic slider numbers: embedded glyph renderer v1.");
         Logger.LogInfo("DangoMusic adaptive contrast: game day/night + manual override; no screen sampling.");
     }
@@ -65,6 +69,8 @@ public sealed class Plugin : BaseUnityPlugin
         window.CheckResponsive();
         window.KeepModalState();
         Client.Configure(Settings);
+        Aggregate.Tick(Settings.PlayerEnabled.Value,Settings.AggregateVolume.Value);
+        Hub.Tick();
         if(saveAt>=0 && Time.unscaledTime>=saveAt){saveAt=-1;Config.Save();}
     }
     void TickLyrics()
@@ -99,7 +105,8 @@ public sealed class Plugin : BaseUnityPlugin
     }
     void LateUpdate(){window?.KeepModalState();TickLyrics();}
     void OnDisable(){window?.Close();folia?.Suspend();}
-    void OnGUI(){window?.Draw();screen?.Draw();folia?.Draw();}
+    void OnGUI(){Hub?.DrawTitleEntry(window?.Open==true);window?.Draw();screen?.Draw();folia?.Draw();}
+    internal void OpenPlayer()=>window.Show(null);
     internal void OpenSettings(SharedSettingsMenu owner)=>window.Show(owner);
     internal void Preview(int seconds=8)
     {
@@ -114,9 +121,11 @@ public sealed class Plugin : BaseUnityPlugin
     }
     void OnDestroy()
     {
+        DiagnosticLog.Write=null;
+        DiagnosticLog.Write=null;
         Config.SettingChanged-=Changed;
         MusicOptionsEntry.Dispose();
         NumericReadout.Dispose();contrast.Dispose();
-        try{Config.Save();}finally{try{window?.Dispose();}finally{harmony?.UnpatchSelf();Client?.Dispose();Renderer?.Dispose();screen?.Dispose();folia?.Dispose();if(Instance==this)Instance=null;}}
+        try{Config.Save();}finally{try{window?.Dispose();}finally{harmony?.UnpatchSelf();Client?.Dispose();Hub?.Dispose();Aggregate?.Dispose();Renderer?.Dispose();screen?.Dispose();folia?.Dispose();if(Instance==this)Instance=null;}}
     }
 }

@@ -96,10 +96,10 @@ internal sealed class LxClient : IDisposable
                     string message=timeline.Lines.Count>0?"已连接 · 使用播放器自带歌词":job!=null?"已连接 · 正在读取歌词":"已连接 · 当前曲目暂无同步歌词";
                     state=new MusicState(true,key,title,artist,(long)Math.Round(progress*1000),(long)Math.Round(duration*1000),status=="playing",tick,rate,timeline,generation,message);
                 }
-                catch(OperationCanceledException) when(!lifetime.IsCancellationRequested)
-                {Disconnected(lastSuccess);}
-                catch(Exception ex) when(ex is HttpRequestException || ex is IOException || ex is JsonException || ex is InvalidOperationException || ex is ObjectDisposedException)
-                {Disconnected(lastSuccess);}
+                catch(OperationCanceledException ex) when(!lifetime.IsCancellationRequested)
+                {Disconnected(lastSuccess,ex);}
+                catch(Exception ex) when(ex is InvalidDataException || ex is HttpRequestException || ex is IOException || ex is JsonException || ex is InvalidOperationException || ex is ObjectDisposedException)
+                {Disconnected(lastSuccess,ex);}
                 await Task.Delay(state.Connected?600:1500,lifetime.Token).ConfigureAwait(false);
             }
         }
@@ -110,9 +110,11 @@ internal sealed class LxClient : IDisposable
             if(job!=null)try{await job.ConfigureAwait(false);}catch(OperationCanceledException) { }
         }
     }
-    void Disconnected(long lastSuccess)
+    void Disconnected(long lastSuccess,Exception error)
     {
-        if(MusicClock.Now-lastSuccess>3000)state=new MusicState(message:"未连接：请开启 BLF / LX 设置中的本机开放 API");
+        if(lifetime.IsCancellationRequested)return;
+        string detail=DiagnosticLog.Report("BLF / LX","读取 /status（端口 "+Volatile.Read(ref port)+"）",error);
+        if(MusicClock.Now-lastSuccess>3000)state=new MusicState(message:detail+"\n请检查播放器本机API设置");
     }
     async Task<LyricResult> ReadLyricsAsync(int currentPort,string key,int currentEpoch,CancellationToken token)
     {
@@ -123,8 +125,8 @@ internal sealed class LxClient : IDisposable
             {var v=data[name];if(v==null || v.Type==JTokenType.Null)return "";if(v.Type!=JTokenType.String)throw new InvalidOperationException();string text=(string)v!;if(text.Length>512*1024)throw new InvalidOperationException();return text;}
             return new LyricResult(key,currentEpoch,LxLyricParser.Parse(TextField("lyric"),TextField("lxlyric"),TextField("tlyric")));
         }
-        catch(Exception ex) when(ex is HttpRequestException || ex is IOException || ex is JsonException || ex is InvalidOperationException || ex is OperationCanceledException || ex is ObjectDisposedException || ex is FormatException || ex is OverflowException)
-        {return new LyricResult(key,currentEpoch,LyricsTimeline.Empty);}
+        catch(Exception ex) when(ex is InvalidDataException || ex is HttpRequestException || ex is IOException || ex is JsonException || ex is InvalidOperationException || ex is OperationCanceledException || ex is ObjectDisposedException || ex is FormatException || ex is OverflowException)
+        {if(!token.IsCancellationRequested&&currentEpoch==Volatile.Read(ref epoch))DiagnosticLog.Report("BLF / LX","读取或解析 /lyric-all（端口 "+currentPort+"）",ex);return new LyricResult(key,currentEpoch,LyricsTimeline.Empty);}
     }
     async Task<JObject> ReadJsonAsync(int currentPort,string path,int limit,int timeoutMs,CancellationToken token)
     {
@@ -132,7 +134,8 @@ internal sealed class LxClient : IDisposable
         using var request=new HttpRequestMessage(HttpMethod.Get,"http://127.0.0.1:"+currentPort+path);
         request.Headers.ConnectionClose=true;request.Headers.Accept.ParseAdd("application/json");
         using var response=await http.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,timeout.Token).ConfigureAwait(false);
-        if(response.StatusCode!=HttpStatusCode.OK || response.Content.Headers.ContentLength>limit)throw new InvalidOperationException("API response rejected");
+        if(response.StatusCode!=HttpStatusCode.OK)throw new HttpRequestException("HTTP "+(int)response.StatusCode+" · "+path.Split('?')[0]);
+        if(response.Content.Headers.ContentLength>limit)throw new InvalidDataException("API响应超过 "+limit+" 字节 · "+path.Split('?')[0]);
         using var stream=await response.Content.ReadAsStreamAsync().ConfigureAwait(false);using var bytes=new MemoryStream();var buffer=new byte[8192];int count;
         while((count=await stream.ReadAsync(buffer,0,buffer.Length,timeout.Token).ConfigureAwait(false))>0)
         {if(bytes.Length+count>limit)throw new IOException("API response too large");bytes.Write(buffer,0,count);}

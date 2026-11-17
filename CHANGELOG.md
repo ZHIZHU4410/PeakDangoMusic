@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.3.0 (2026-11-17)
+- Muonium播放器成为主功能：主菜单直接入口、侧栏首页/搜索/发现/歌单/收藏/历史/队列/账号/歌词设置和底部常驻播放栏。
+- 直接复用固定版本的Muonium网易云/QQ原生服务，接入真实二维码登录、原生搜索取流、推荐歌单和账号状态；网易云支持个人歌单与每日推荐。QQ个人云端歌单列表尚未适配，界面明确说明。
+- 登录态通过Windows当前用户DPAPI加密；二维码本地生成，账号密码不经过模组输入界面。收藏、队列、历史本机持久化。
+- 内置校验的Temurin21、Gson和ZXing，后台stdio通信，无本机监听端口。修复匿名网易云weapi搜索拒绝时的官方公开目录回退。
+- 停用旧CMD/LX/CDP/SMTC桌面同步运行路径，旧启动脚本备份并从新安装包移除；保留全部10个GD聚合入口。
+- 音乐播放与悬浮歌词开关分离；地图内Dango/Folia渲染继续沿用原实现。
+
+## 2.2.0 (2026-11-17)
+- 新增游戏内 GD 聚合音乐：全部10个平台入口、每页20首搜索、点击播放、暂停/继续、停止、进度拖动、音量与音质控制。聚合音频时间轴供给现有 Dango/Folia 歌词。
+- 保留各平台返回的歌曲与歌词标识；共享50次/5分钟限流、12秒/2MiB请求限制、失败冷却、同曲音质降级、切换来源取消旧请求。歌词失败不阻止音频播放。
+- 参考 MuoniumPlayer 的后台隔离和有限重试：500ms媒体采样，辅助组件连续失败3次等待手动重连，新歌无真实时钟不猜测零起点，进度缺失最多外推30秒。
+- 新增通用系统媒体会话入口；保留BLF/LX、网易云、酷狗和QQ同步。
+- README专注项目和使用介绍，更新内容独立放在本文件；补充Muonium来源、许可与平台实测范围。
+- 验证：插件/桥接器编译，307项现有回归、9项聚合检查通过；网易云/JOOX搜索和网易云地址/歌词接口通过。未完成Unity实际音频与地图验收；七个平台本次接口返回400，哔哩哔哩样本为空。
+
+## 2.1.4 (2026-11-16)
+- Replace generic connection/render errors with module, failing operation, exception cause and application stack location. Source line numbers are shown when available; reporting sites are labeled explicitly as a fallback.
+- Add a bounded recent-error panel on the left, timestamps, repeated-error counts, copy and clear actions. Repeated polling does not count as new errors; genuine native API retries update the error record.
+- Preserve underlying native-player/lyrics/Folia errors, including a failed QQ lookup before successful fallback. Redact URL credentials/query strings and sensitive headers from details.
+
 ## 2.1.3 (2026-11-16)
 - Remove hard outlines from lyric faces and translations in world, screen and compatible text rendering. Preserve the independently controlled soft glow.
 - No runtime or automated tests were run, as requested.

@@ -14,9 +14,10 @@ internal sealed class NativeMusicClient : IDisposable
     readonly object gate=new();
     Process? child;
     volatile MusicState state=new(message:"等待原版网易云音乐");
+    int restartEpoch=-1,restarts;
     int enabled,port=9223,epoch,source=1;
     string lyricsFolder="";
-    string Player=>Volatile.Read(ref source) switch{2=>"酷狗音乐",3=>"QQ音乐",_=>"原版网易云音乐"};
+    string Player=>Volatile.Read(ref source) switch{2=>"酷狗音乐",3=>"QQ音乐",5=>"系统媒体会话",_=>"原版网易云音乐"};
     internal MusicState Snapshot=>state;
     internal NativeMusicClient(){worker=Task.Run(Run);}
     internal void Configure(int nextPort,bool active,int nextSource=1,string nextFolder="")
@@ -43,27 +44,37 @@ internal sealed class NativeMusicClient : IDisposable
             {
                 if(Volatile.Read(ref enabled)==0){await Task.Delay(400,lifetime.Token).ConfigureAwait(false);continue;}
                 int currentEpoch=Volatile.Read(ref epoch);
+                if(restartEpoch!=currentEpoch){restartEpoch=currentEpoch;restarts=0;}
+                if(restarts>=3){await Task.Delay(400,lifetime.Token).ConfigureAwait(false);continue;}
                 string path=Path.Combine(Path.GetDirectoryName(typeof(Plugin).Assembly.Location)!,"PeakDangoMusic","Native","PeakNeteaseBridge.exe");
-                if(!File.Exists(path)){state=new MusicState(message:"缺少播放器连接组件，请完整安装2.0安装包");await Task.Delay(2500,lifetime.Token).ConfigureAwait(false);continue;}
+                if(!File.Exists(path)){state=new MusicState(message:DiagnosticLog.Report(Player,"连接组件 / 检查安装文件",new FileNotFoundException("缺少 PeakDangoMusic/Native/PeakNeteaseBridge.exe，请完整安装")));await Task.Delay(2500,lifetime.Token).ConfigureAwait(false);continue;}
                 Process? process=null;
+                string stage="连接组件 / 启动进程";
                 try
                 {
-                    process=new Process{StartInfo=new ProcessStartInfo(path,Process.GetCurrentProcess().Id+" "+Volatile.Read(ref port)+" "+(Volatile.Read(ref source) switch{2=>"kugou",3=>"qqmusic",_=>"netease"})+" \""+lyricsFolder.Replace("\"","").TrimEnd('\\')+"\"")
+                    process=new Process{StartInfo=new ProcessStartInfo(path,Process.GetCurrentProcess().Id+" "+Volatile.Read(ref port)+" "+(Volatile.Read(ref source) switch{2=>"kugou",3=>"qqmusic",5=>"external",_=>"netease"})+" \""+lyricsFolder.Replace("\"","").TrimEnd('\\')+"\"")
                     {UseShellExecute=false,CreateNoWindow=true,WindowStyle=ProcessWindowStyle.Hidden,RedirectStandardOutput=true,StandardOutputEncoding=new UTF8Encoding(false),WorkingDirectory=Path.GetDirectoryName(path)!}};
                     lock(gate)
                     {
                         if(currentEpoch!=Volatile.Read(ref epoch) || Volatile.Read(ref enabled)==0 || lifetime.IsCancellationRequested)continue;
                         process.Start();child=process;
                     }
-                    LyricsTimeline timeline=LyricsTimeline.Empty;string timelineKey="";
+                    long startedAt=MusicClock.Now;
+                    LyricsTimeline timeline=LyricsTimeline.Empty;string timelineKey="",reportedMessage="",reportedDiagnostic="";
+                    long reportedStamp=0;
                     while(!lifetime.IsCancellationRequested && currentEpoch==Volatile.Read(ref epoch) && Volatile.Read(ref enabled)!=0)
                     {
-                        string? line=await ReadLineBounded(process.StandardOutput,lifetime.Token).ConfigureAwait(false);if(line==null)break;
+                        stage="连接组件 / 等待心跳";
+                        string? line=await ReadLineBounded(process.StandardOutput,lifetime.Token).ConfigureAwait(false);
+                        if(line==null)throw new IOException("连接组件输出已关闭"+(process.HasExited?"，退出码 "+process.ExitCode:""));
+                        if(MusicClock.Now-startedAt>10000)restarts=0;
+                        stage="连接组件 / 解析JSON数据";
                         using var reader=new JsonTextReader(new StringReader(line)){MaxDepth=12,DateParseHandling=DateParseHandling.None};
                         var data=JObject.Load(reader);string key=Text(data,"key",1600);
                         if(key!=timelineKey){timelineKey=key;timeline=LyricsTimeline.Empty;}
                         if(data["lines"] is JArray lines)
                         {
+                            stage="连接组件 / 解析歌词行与逐字时间";
                             if(lines.Count>12000)throw new InvalidDataException();
                             var parsed=new List<LyricsLine>();
                             foreach(var token in lines)
@@ -73,14 +84,21 @@ internal sealed class NativeMusicClient : IDisposable
                             }
                             timeline=LyricsTimeline.FromLines(parsed);
                         }
+                        stage="连接组件 / 解析播放进度";
                         long duration=(long?)data["durationMs"]??0;long? position=(long?)data["positionMs"];
                         bool valid=position>=0 && duration>0 && duration<=86400000 && position<=duration;
                         if(currentEpoch!=Volatile.Read(ref epoch))break;
+                        string message=Text(data,"message",2048),diagnostic=Text(data,"diagnostic",2048);
+                        bool newMessage=message!=reportedMessage;
+                        if(newMessage)DiagnosticLog.Report(message);
+                        long stamp=(long?)data["diagnosticStamp"]??0;
+                        if(diagnostic!=reportedDiagnostic||stamp!=reportedStamp){if(!newMessage||diagnostic!=message)DiagnosticLog.Report(diagnostic);}
+                        reportedMessage=message;reportedDiagnostic=diagnostic;reportedStamp=stamp;
                         state=new MusicState((bool?)data["connected"]??false,valid?key:"",Text(data,"title",512),Text(data,"artist",512),position??0,duration,(bool?)data["playing"]??false,MusicClock.Now,1,timeline,(int?)data["generation"]??0,Text(data,"message",1024));
                     }
                 }
-                catch(Exception ex) when(ex is TimeoutException || ex is IOException || ex is JsonException || ex is InvalidOperationException || ex is System.ComponentModel.Win32Exception || ex is ArgumentException || ex is OverflowException)
-                {if(currentEpoch==Volatile.Read(ref epoch))state=new MusicState(message:Player+"连接组件暂不可用，正在重试；可查看安装说明");}
+                catch(Exception ex) when(ex is InvalidDataException || ex is TimeoutException || ex is IOException || ex is JsonException || ex is InvalidOperationException || ex is System.ComponentModel.Win32Exception || ex is ArgumentException || ex is OverflowException)
+                {if(currentEpoch==Volatile.Read(ref epoch)&&Volatile.Read(ref enabled)!=0&&!lifetime.IsCancellationRequested)state=new MusicState(message:DiagnosticLog.Report(Player,stage,ex)+(++restarts>=3?"\n连续失败3次，请点击重新连接":"\n正在重试"));}
                 finally
                 {
                     lock(gate){if(child==process){StopChild();child=null;}}

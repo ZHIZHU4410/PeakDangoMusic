@@ -24,9 +24,9 @@ public sealed class SmtcReader
         long duration = Math.Max(0, (long)(time.EndTime - time.StartTime).TotalMilliseconds);
         long? position = null;
         // The stock client reports all zeros and the 1601 epoch. This is unavailable, not track start.
-        if (time.LastUpdatedTime.Year >= 2000 && duration > 0)
+        if (time.LastUpdatedTime.Year >= 2000 && duration > 0 && (!playing || (DateTimeOffset.UtcNow-time.LastUpdatedTime).TotalMilliseconds <= 30000))
         {
-            long advance = playing ? (long)Math.Clamp((DateTimeOffset.UtcNow - time.LastUpdatedTime).TotalMilliseconds, 0, duration) : 0;
+            long advance = playing ? (long)Math.Clamp((DateTimeOffset.UtcNow - time.LastUpdatedTime).TotalMilliseconds, 0, 30000) : 0;
             double rate = state.PlaybackRate is { } r && double.IsFinite(r) && r > 0 ? r : 1;
             position = Math.Clamp((long)(time.Position - time.StartTime).TotalMilliseconds + (long)(advance * rate), 0, duration);
         }

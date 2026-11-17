@@ -16,6 +16,8 @@ internal sealed class MusicWindow : IDisposable
     readonly List<Texture2D> textures=new();
     int suppressInputUntil=-1;
     SharedSettingsMenu? owner;
+    bool standalone;
+    string openedScene="";
     EventSystem? eventSystem;
     bool previousNavigation;
     bool navigationCaptured;
@@ -26,10 +28,10 @@ internal sealed class MusicWindow : IDisposable
     internal bool BlocksPlayerInput=>Open || Time.frameCount<=suppressInputUntil;
     internal bool CloseRequested=>closeRequested;
     internal void RequestClose()=>closeRequested=true;
-    internal void Show(SharedSettingsMenu source)
+    internal void Show(SharedSettingsMenu? source)
     {
         if(Open)return;
-        owner=source;closeRequested=false;Open=true;suppressInputUntil=-1;MusicPanel.ResetEntrance();lastDrawFrame=Time.frameCount;wasFocused=Application.isFocused;
+        owner=source;standalone=source==null;openedScene=UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;closeRequested=false;Open=true;suppressInputUntil=-1;MusicPanel.ResetEntrance();lastDrawFrame=Time.frameCount;wasFocused=Application.isFocused;
         SuspendNativeUI();
     }
     // Never disable the EventSystem or its input module: other mods and PEAK's own
@@ -64,7 +66,7 @@ internal sealed class MusicWindow : IDisposable
             image.color=new Color(0,0,0,0.001f);
             image.raycastTarget=true;
         }
-        catch(Exception ex){Plugin.Instance?.LogError("DangoMusic 输入遮挡层创建失败："+ex.Message);}
+        catch(Exception ex){DiagnosticLog.Report("设置窗口","创建输入遮挡层",ex);}
     }
     void DestroyBlocker()
     {
@@ -84,7 +86,7 @@ internal sealed class MusicWindow : IDisposable
     internal void CheckOwner()
     {
         if(!Open)return;
-        if(owner==null || !owner.isActiveAndEnabled)Close();
+        if((!standalone&&(owner==null||!owner.isActiveAndEnabled))||openedScene!=UnityEngine.SceneManagement.SceneManager.GetActiveScene().name)Close();
     }
     // A modal that cannot draw for three focused seconds is not usable: release its
     // input block instead of leaving gameplay dead until the game is restarted.
@@ -95,7 +97,7 @@ internal sealed class MusicWindow : IDisposable
         if(!wasFocused){wasFocused=true;lastDrawFrame=Time.frameCount;return;}
         if(Time.frameCount-lastDrawFrame>180)
         {
-            Plugin.Instance?.LogError("DangoMusic 设置界面 3 秒未绘制，已自动关闭并恢复输入。");
+            DiagnosticLog.Report("设置窗口","绘制响应监测",new TimeoutException("设置界面连续180帧未绘制，已自动关闭并恢复输入"));
             Close();
         }
     }
@@ -116,7 +118,7 @@ internal sealed class MusicWindow : IDisposable
             suppressInputUntil=Time.frameCount+1;
             GUI.FocusControl(null);
             try{Plugin.Instance?.Config.Save();}
-            catch(Exception ex){Plugin.Instance?.Log("DangoMusic 设置保存失败："+ex.Message);}
+            catch(Exception ex){DiagnosticLog.Report("设置窗口","保存配置",ex);}
             var gui=GUIManager.instance;
             Plugin.Instance?.Log("DangoMusic 设置已关闭，游戏输入已恢复。timeScale="+Time.timeScale.ToString("F2")
                 +" pauseMenu="+GUIManager.InPauseMenu+" windowBlockingInput="+(gui!=null && gui.windowBlockingInput)
@@ -180,16 +182,16 @@ internal sealed class MusicWindow : IDisposable
     void Content(int id)
     {
         GUILayout.BeginHorizontal();GUILayout.BeginVertical();
-        GUILayout.Label("DangoMusic · 漂浮歌词",heading);
-        GUILayout.Label("歌词设置  ·  设置自动保存  ·  v"+Plugin.Version+(MusicPanel.Feedback.Length>0?"  ·  "+MusicPanel.Feedback:""),subtitle);
+        GUILayout.Label("Muonium · PEAK 音乐播放器",heading);
+        GUILayout.Label("原生曲库 / 多平台聚合  ·  设置自动保存  ·  v"+Plugin.Version+(MusicPanel.Feedback.Length>0?"  ·  "+MusicPanel.Feedback:""),subtitle);
         GUILayout.EndVertical();
-        bool close=GUILayout.Button("返回选项  ·  Esc",GUILayout.Width(220),GUILayout.Height(48));
+        bool close=GUILayout.Button("关闭  ·  Esc",GUILayout.Width(220),GUILayout.Height(48));
         // Record the request before drawing the panel. A layout exception in the
         // panel can then no longer strand the modal in the open(input-blocking) state.
         if(close)RequestClose();
         GUILayout.EndHorizontal();GUILayout.Space(18);
-        try{MusicPanel.DrawStandalone(rect.width-48);}
-        catch(Exception ex){Plugin.Instance?.LogError("DangoMusic 设置界面绘制失败："+ex);}
+        try{Plugin.Instance!.Hub.Draw(rect.width-48,rect.height);}
+        catch(Exception ex){DiagnosticLog.Report("设置窗口","绘制设置面板",ex);}
         // Keep the footer outside the scrolling settings so it stays at bottom left.
         GUILayout.Space(10);
         GUILayout.BeginHorizontal();

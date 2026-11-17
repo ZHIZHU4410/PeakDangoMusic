@@ -25,10 +25,8 @@ public sealed class PlaybackBuffer
         metadataAt=sample.SampleTick;
         if(current==null||!Same(current,sample))
         {
-            // A new track with a playing state but no clock yet starts at zero and is
-            // corrected by the next real sample. Hiding the whole song is worse.
-            current=sample.PositionMs.HasValue||!sample.Playing||sample.DurationMs<=0?sample:
-                sample with{PositionMs=0,SampleTick=now,Source=sample.Source+"+estimated"};
+            // A new track needs a real clock observation; never invent a zero start.
+            current=sample;
             progressAt=current.PositionMs.HasValue?current.SampleTick:long.MinValue;
             return;
         }
@@ -40,10 +38,10 @@ public sealed class PlaybackBuffer
         else
         {
             // Freeze/resume at the extrapolated clock, not at the last raw sample.
-            long? currentPosition=current.PositionAt(now);
+            long? currentPosition=progressAt!=long.MinValue&&now-progressAt<=MetadataGraceMs?current.PositionAt(now):null;
             current=current with
             {
-                PositionMs=currentPosition??current.PositionMs,
+                PositionMs=currentPosition,
                 SampleTick=now,
                 Playing=sample.Playing,
                 Artist=current.Artist.Length>0?current.Artist:sample.Artist
@@ -55,7 +53,8 @@ public sealed class PlaybackBuffer
     {
         if(current==null||now<metadataAt||now-metadataAt>MetadataGraceMs)return null;
         if(progressAt==long.MinValue)return current;
-        // Do not null PositionMs on a stale sample: extrapolation is the intended bridge.
+        // Extrapolate briefly, then explicitly report a missing clock.
+        if(current.Playing && now-progressAt>30000)return current with{PositionMs=null};
         return current;
     }
 }

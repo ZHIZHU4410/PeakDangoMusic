@@ -7,7 +7,7 @@ public sealed class PlaybackSampler : IDisposable
     readonly object gate=new();
     readonly PlaybackBuffer buffer=new();
     readonly Task worker;
-    public PlaybackSampler(Func<CancellationToken,Task<DesktopPlayback?>> read,CancellationToken lifetime)
+    public PlaybackSampler(Func<CancellationToken,Task<DesktopPlayback?>> read,CancellationToken lifetime,Action<Exception>? report=null)
     {
         cancel=CancellationTokenSource.CreateLinkedTokenSource(lifetime);
         worker=Task.Run(async()=>
@@ -17,9 +17,9 @@ public sealed class PlaybackSampler : IDisposable
                 while(!cancel.IsCancellationRequested)
                 {
                     DesktopPlayback? sample=null;
-                    try{sample=await read(cancel.Token).ConfigureAwait(false);}catch(Exception ex)when(ex is not OutOfMemoryException){}
+                    try{sample=await read(cancel.Token).ConfigureAwait(false);}catch(Exception ex)when(ex is not OutOfMemoryException){if(!cancel.IsCancellationRequested)report?.Invoke(ex);}
                     lock(gate)buffer.Observe(sample,Environment.TickCount64);
-                    await Task.Delay(250,cancel.Token).ConfigureAwait(false);
+                    await Task.Delay(500,cancel.Token).ConfigureAwait(false);
                 }
             }
             catch(OperationCanceledException){}

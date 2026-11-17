@@ -41,7 +41,7 @@ if(args.Length==1&&args[0]=="--sessions")
 }
 if(args.Length is not (2 or 3 or 4) || !int.TryParse(args[0],out int parentId) || !int.TryParse(args[1],out int port) || port<1 || port>65535)return;
 string source=args.Length>=3?args[2]:"netease";
-if(source is not ("netease" or "kugou" or "qqmusic"))return;
+if(source is not ("netease" or "kugou" or "qqmusic" or "external"))return;
 string player=PlayerIdentity.Label(source);
 using var parent=Process.GetProcessById(parentId);
 using var cancel=new CancellationTokenSource();
@@ -52,6 +52,7 @@ using var qqLyrics=new QqPublicLyricsClient();
 var smtc=new SmtcReader();
 var jsonOptions=new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase};
 string key="",message="等待原版网易云音乐";
+string diagnostic="";
 LyricsTimeline timeline=LyricsTimeline.Empty;
 int generation=0,sentGeneration=-1;
 long retryAt=0;
@@ -67,7 +68,7 @@ using var sampler=new PlaybackSampler(async ct=>
         if(native!=null&&native.Title.Length>0&&(playback==null||SameTrack(playback,native)))playback=native;
     }
     return playback;
-},cancel.Token);
+},cancel.Token,ex=>Interlocked.Exchange(ref diagnostic,DangoMusic.Diagnostics.FailureDetail.Describe(player,"读取系统媒体会话 / 曲名与进度",ex)));
 try
 {
     while(!parent.HasExited)
@@ -89,6 +90,9 @@ try
             connected=playback!=null,key,title=playback?.Title??"",artist=playback?.Artist??"",
             positionMs=playback?.PositionAt(Environment.TickCount64),durationMs=playback?.DurationMs??0,
             playing=playback?.Playing??false,generation,message=status,
+            diagnostic=Interlocked.Exchange(ref diagnostic,"") is {Length:>0} failure?failure:
+                source=="kugou"?kugouApi.Status:source=="netease"?cdp.Status:"",
+            diagnosticStamp=source=="kugou"?kugouApi.LastFailureTick:source=="netease"?cdp.LastFailureTick:0,
             lines=sentGeneration==generation?null:timeline.Lines
         };
         Console.WriteLine(JsonSerializer.Serialize(packet,jsonOptions));Console.Out.Flush();sentGeneration=generation;
@@ -100,6 +104,7 @@ finally{cancel.Cancel();}
 
 async Task<(string,LyricsTimeline,string)> Fetch(DesktopPlayback track)
 {
+    string stage="读取本机歌词缓存";
     try
     {
         if(source=="kugou")
@@ -109,22 +114,25 @@ async Task<(string,LyricsTimeline,string)> Fetch(DesktopPlayback track)
         }
         if(source=="qqmusic")
         {
+            stage="QQ公开曲库 / 搜索匹配与读取歌词";
             try{var native=await qqLyrics.FindAsync(track,cancel.Token);if(native.Lines.Count>0)return(source+"/"+track.Key,native,"已连接QQ音乐 · QQ本平台同步歌词");}
-            catch(Exception ex)when(ex is HttpRequestException or InvalidDataException or JsonException or OperationCanceledException){cancel.Token.ThrowIfCancellationRequested();}
+            catch(Exception ex)when(ex is HttpRequestException or InvalidDataException or JsonException or OperationCanceledException){cancel.Token.ThrowIfCancellationRequested();Interlocked.Exchange(ref diagnostic,DangoMusic.Diagnostics.FailureDetail.Describe(player,stage,ex));}
         }
         long id=source=="netease"?track.SongId:0;
         if(id<=0)
         {
+            stage="备用公开曲库 / 搜索歌曲版本";
             var candidates=await lyrics.SearchAsync(track.Title+" "+track.Artist,cancel.Token);
             var match=SongMatcher.FindBest(track.Title,track.Artist,track.DurationMs,candidates);
             if(match==null)return(source+"/"+track.Key,LyricsTimeline.Empty,source=="kugou"?"未找到匹配的本机歌词，公开曲库也无确定版本；请检查酷狗歌词缓存目录":"公开曲库未找到确定的歌曲版本");
             id=match.Id;
         }
+        stage="网易云公开接口 / 读取同步歌词（歌曲ID "+id+"）";
         var result=await lyrics.GetLyricsAsync(id,cancel.Token);
         return(source+"/"+track.Key,result,result.Lines.Count>0?"已连接"+player+" · 公开同步歌词":"已连接"+player+" · 此曲暂无同步歌词");
     }
-    catch(OperationCanceledException){return(source+"/"+track.Key,LyricsTimeline.Empty,"网易云歌词读取已取消");}
-    catch(Exception ex) when(ex is not OutOfMemoryException){return(source+"/"+track.Key,LyricsTimeline.Empty,"网易云歌词接口暂不可用，稍后自动重试");}
+    catch(OperationCanceledException) when(cancel.IsCancellationRequested){return(source+"/"+track.Key,LyricsTimeline.Empty,player+"歌词读取已取消");}
+    catch(Exception ex) when(ex is not OutOfMemoryException){return(source+"/"+track.Key,LyricsTimeline.Empty,DangoMusic.Diagnostics.FailureDetail.Describe(player,stage,ex)+"\n稍后自动重试");}
 }
 static bool SameTrack(DesktopPlayback a,DesktopPlayback b)=>string.Equals(a.Title.Trim(),b.Title.Trim(),StringComparison.OrdinalIgnoreCase) &&
     (a.Artist.Length==0 || b.Artist.Length==0 || string.Equals(a.Artist.Trim(),b.Artist.Trim(),StringComparison.OrdinalIgnoreCase));

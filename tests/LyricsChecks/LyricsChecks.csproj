@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../source/Shared/FailureDetail.cs" Link="FailureDetail.cs" />
     <Compile Include="../../source/NetEaseBridge/Desktop/KugouApiReader.cs" Link="KugouApiReader.cs" />
     <Compile Include="../../source/NetEaseBridge/Desktop/QqPublicLyricsClient.cs" Link="QqPublicLyricsClient.cs" />
     <Compile Include="../../source/NetEaseBridge/Desktop/PlaybackBuffer.cs" Link="PlaybackBuffer.cs" />

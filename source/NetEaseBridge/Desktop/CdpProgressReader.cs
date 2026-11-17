@@ -16,6 +16,7 @@ public sealed class CdpProgressReader : IDisposable
     private readonly SemaphoreSlim readGate = new(1, 1);
     private int disposed;
     public string Status { get; private set; } = "等待网易云本机进度接口";
+    public long LastFailureTick { get; private set; }
 
     // Fixed playback reads only. The once-per-page webpack capture obtains an existing module cache;
     // it never dispatches actions, subscribes to native events, controls media or reads credentials/storage.
@@ -194,9 +195,9 @@ public sealed class CdpProgressReader : IDisposable
             }
             return null;
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { Status = "网易云读取超时；" + Status; return null; }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested) { LastFailureTick=Environment.TickCount64;Status = DangoMusic.Diagnostics.FailureDetail.Describe("网易云",Status,ex); return null; }
         catch (Exception ex) when (ex is HttpRequestException or WebSocketException or IOException or JsonException or ObjectDisposedException)
-        { Status = "网易云本机连接异常（" + ex.GetType().Name + "）；" + Status; return null; }
+        { LastFailureTick=Environment.TickCount64;Status = DangoMusic.Diagnostics.FailureDetail.Describe("网易云",Status,ex); return null; }
         finally { if (entered) readGate.Release(); }
     }
 

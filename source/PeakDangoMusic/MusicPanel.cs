@@ -22,7 +22,7 @@ public static class MusicPanel
     const float RowLabelWidth=144,ValueWidth=96,ControlGap=12;
     static readonly string[] Modes={"整句","单词","逐字（整句）"};
     static readonly string[] Tabs={"歌词显示与位置","动画与效果","Folia歌词样式","字体"};
-    static readonly string[] Sources={"BLF / LX","原版网易云","酷狗音乐","QQ音乐"};
+    static readonly string[] Sources={"BLF / LX","原版网易云","酷狗音乐","QQ音乐","GD聚合音乐","系统媒体会话"};
     static readonly string[] EffectPresets={"原项目默认","轻柔漂浮","活泼弹跳","静态清晰"};
     static readonly string[] Entrance={"淡入","上浮","弹入","直接"},Exit={"淡出","上浮","缩小","直接"};
     internal static void ResetEntrance()=>entranceAt=-1;
@@ -127,7 +127,19 @@ public static class MusicPanel
             long position=state.PositionAt(MusicClock.Now)??state.PositionMs;
             GUILayout.Label(new GUIContent((state.Playing?"播放中  ":"已暂停  ")+TimeText(position)+" / "+TimeText(state.DurationMs)),valueStyle);
         }
+        string errors=DiagnosticLog.Snapshot;
+        if(errors.Length>0)
+        {
+            GUILayout.Space(16);SectionTitle("最近错误");
+            GUILayout.Label(errors,hint);
+            GUILayout.BeginHorizontal();
+            if(Button("复制错误详情"))GUIUtility.systemCopyBuffer=errors;
+            if(Button("清空记录"))DiagnosticLog.Clear();
+            GUILayout.EndHorizontal();
+        }
         GUILayout.Space(24);SectionTitle("连接设置");
+        if(s.EffectiveSource==4){AggregateControls(plugin);return;}
+        if(s.EffectiveSource==5){GUILayout.Label("读取当前正在播放的 Windows 媒体会话；支持提供有效进度的 Spotify、Apple Music、浏览器等。",hint);if(Button("重新探测系统会话"))plugin.Client.Reconnect();return;}
         if(s.EffectiveSource>=2)
         {
             string name=s.EffectiveSource==2?"酷狗音乐":"QQ音乐";
@@ -169,7 +181,7 @@ public static class MusicPanel
         {
             string path=(pathText??"").Trim();
             if(!File.Exists(path))plugin.Notice="未找到播放器，请检查上面的 exe 路径。";
-            else try{s.PlayerPath.Value=path;Process.Start(new ProcessStartInfo(path){UseShellExecute=true,WindowStyle=ProcessWindowStyle.Normal});plugin.Notice="已打开播放器。";}catch(Exception e){plugin.Notice="打开失败："+e.Message;}
+            else try{s.PlayerPath.Value=path;Process.Start(new ProcessStartInfo(path){UseShellExecute=true,WindowStyle=ProcessWindowStyle.Normal});plugin.Notice="已打开播放器。";}catch(Exception e){plugin.Notice=DiagnosticLog.Report("BLF / LX","启动播放器",e);}
         }
         GUILayout.Space(12);
         if(Button("重新连接"))plugin.Client.Reconnect();
@@ -179,6 +191,57 @@ public static class MusicPanel
         if(plugin.Notice.Length>0){GUILayout.Space(12);GUILayout.Label(plugin.Notice,hint);}
         GUILayout.Space(24);SectionTitle("使用提示");
         GUILayout.Label("主菜单、机场、地图和设置界面均可接续显示歌词。音乐由播放器独立播放，不随窗口暂停。联机队友继续运行。",hint);
+    }
+    static string aggregateQuery="",searchedQuery="";
+    static int aggregatePage=1,searchedPlatform=-1;
+    static void AggregateControls(Plugin plugin)
+    {
+        var s=plugin.Settings;var player=plugin.Aggregate;
+        GUILayout.Label("GD聚合平台（全部10项）",hint);
+        for(int i=0;i<GdMusicApi.Keys.Length;i+=2)
+        {
+            GUILayout.BeginHorizontal();
+            for(int j=i;j<Math.Min(i+2,GdMusicApi.Keys.Length);j++)
+                if(GUILayout.Button(GdMusicApi.Names[j],s.AggregatePlatform.Value==j?selectedStyle!:buttonStyle!,GUILayout.MinHeight(40)))s.AggregatePlatform.Value=j;
+            GUILayout.EndHorizontal();
+        }
+        GUILayout.Label("部分平台可能未开放，空结果或失败时可换源。",hint);
+        aggregateQuery=GUILayout.TextField(aggregateQuery,200,GUILayout.MinHeight(42));
+        bool old=GUI.enabled;GUI.enabled=old&&!player.Busy;
+        if(Button("搜索歌曲 / 歌手")){aggregatePage=1;searchedQuery=aggregateQuery;searchedPlatform=s.AggregatePlatform.Value;player.Search(GdMusicApi.Keys[searchedPlatform],searchedQuery,aggregatePage);}
+        GUILayout.BeginHorizontal();
+        if(Button("上一页")&&aggregatePage>1&&searchedPlatform>=0){aggregatePage--;player.Search(GdMusicApi.Keys[searchedPlatform],searchedQuery,aggregatePage);}
+        if(Button("下一页")&&searchedPlatform>=0){aggregatePage++;player.Search(GdMusicApi.Keys[searchedPlatform],searchedQuery,aggregatePage);}
+        GUILayout.EndHorizontal();GUI.enabled=old;
+        GUILayout.Label("第 "+aggregatePage+" 页 · "+player.Status,hint);
+        GUILayout.BeginHorizontal();
+        if(Button("播放 / 暂停"))player.TogglePause();
+        if(Button("停止"))player.Stop();
+        GUILayout.EndHorizontal();
+        GUILayout.Label("音量",hint);s.AggregateVolume.Value=GUILayout.HorizontalSlider(s.AggregateVolume.Value,0,1);
+        var snapshot=player.Snapshot;
+        if(snapshot.DurationMs>0)
+        {
+            GUILayout.Label(snapshot.Title+" · "+snapshot.Artist,hint);
+            float progress=(float)snapshot.PositionMs/snapshot.DurationMs;
+            float selected=GUILayout.HorizontalSlider(progress,0,1);
+            if(Math.Abs(selected-progress)>.001f)player.Seek(selected);
+        }
+        GUILayout.Label("请求音质："+s.AggregateBitrate.Value+" kbps",hint);
+        GUILayout.BeginHorizontal();
+        foreach(int rate in new[]{128,320,999})if(Button(rate==999?"无损":rate.ToString()))s.AggregateBitrate.Value=rate;
+        GUILayout.EndHorizontal();
+        GUI.enabled=old&&!player.Busy;
+        foreach(var track in player.Results)
+            if(GUILayout.Button(track.Title+"\n"+track.Artist+" · "+track.Album,buttonStyle!,GUILayout.MinHeight(54)))player.Play(track,s.AggregateBitrate.Value);
+        GUI.enabled=old;
+    }
+    internal static void DrawLyricsSettings()
+    {
+        var plugin=Plugin.Instance;if(plugin==null)return;Styles();
+        GUILayout.Label("地图悬浮歌词",title);
+        plugin.Settings.Enabled.Value=GUILayout.Toggle(plugin.Settings.Enabled.Value,"显示悬浮歌词（不影响音乐播放）");
+        Display(plugin);GUILayout.Space(20);Effects(plugin);GUILayout.Space(20);FoliaStyle(plugin);GUILayout.Space(20);Fonts(plugin);
     }
     static void Fonts(Plugin plugin)
     {

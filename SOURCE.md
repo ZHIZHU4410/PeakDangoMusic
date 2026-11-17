@@ -1,7 +1,12 @@
 # 源码与许可证
 
-2.1.3 安装包仅含插件、必要运行组件、安装脚本与许可证，源码不在安装包内。完整对应源码单独提供为 PeakDangoMusic-2.1.3-source.zip，包含插件、桥接器、Folia适配与上游源码、测试和构建脚本。
+2.3.0完整安装包只包含运行组件、安装脚本和文档；完整对应源码为 PeakDangoMusic-2.3.0-source.zip。本地构建尚未自动上传GitHub。
 
-项目地址：https://github.com/ZHIZHU4410/PeakDangoMusic 。2.1.3源码见仓库main分支；对应安装包与独立源码包随 v2.1.3 Release 一并发布。
+- source/PeakDangoMusic：PEAK主界面、播放引擎、加密账号存储及原有Dango/Folia接入。
+- source/MuoniumBridge：上游23个原生服务文件、PEAK私有stdio适配、依赖锁定和可复现构建脚本。
+- source/FoliaRenderer：既有Folia源码、前端适配和运行时构建。
+- source/NetEaseBridge与旧LX/CDP/SMTC读取器仅保留为历史源码，本版不启动这些旧路径。
 
-插件采用GPL-3.0，Folia与适配部分采用AGPL-3.0；见LICENSE、FOLIA-LICENSE.txt和NOTICE.md。用户的LX音源脚本、API密钥、播放器文件、诊断日志均不在源码包或安装包内。
+Dango/插件GPL-3.0，Folia及渲染适配AGPL-3.0，Muonium原生服务Apache-2.0。Java运行时GPL-2.0 with Classpath Exception及其第三方声明随Muonium/Runtime/legal提供；Gson和ZXing为Apache-2.0。
+
+账号凭证、用户曲库、游戏文件、临时实机检查组件、诊断截图和缓存均不进入源码或安装包。项目地址：https://github.com/ZHIZHU4410/PeakDangoMusic 。

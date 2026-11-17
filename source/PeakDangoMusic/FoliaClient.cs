@@ -90,11 +90,13 @@ internal sealed class FoliaClient : IDisposable
                 if(!File.Exists(executable)||!File.Exists(Path.Combine(app,"dist","index.html")))
                 {status="缺少Folia样式组件，请安装完整的1.2.2或更新安装包；暂用Dango显示";await Task.Delay(2500,lifetime.Token).ConfigureAwait(false);continue;}
                 Process? process=null;
+                string stage="校验组件协议";
                 try
                 {
                     if(Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(app,"package.json"))).Value<int?>("peakProtocol")!=3)
                     {status="Folia组件与DLL版本不匹配，请一起更新完整1.2.2安装包；暂用Dango显示";await Task.Delay(2500,lifetime.Token).ConfigureAwait(false);continue;}
                     string pipeName="PeakFolia-"+Guid.NewGuid().ToString("N");
+                    stage="创建命名管道";
                     using var pipe=new NamedPipeServerStream(pipeName,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous);
                     string profile=Path.Combine(BepInEx.Paths.CachePath,"PeakDangoMusicFolia",Process.GetCurrentProcess().Id.ToString());Directory.CreateDirectory(profile);
                     process=new Process{StartInfo=new ProcessStartInfo(executable,"\""+app+"\" --parent="+Process.GetCurrentProcess().Id+" --profile=\""+profile+"\" --pipe="+pipeName+" --software="+(first.Software?"1":"0"))
@@ -102,6 +104,7 @@ internal sealed class FoliaClient : IDisposable
                     int sessionEpoch=Volatile.Read(ref epoch);
                     // A game launched from an Electron host must still start this as Electron, not plain Node.
                     process.StartInfo.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE");
+                    stage="启动渲染进程";
                     lock(gate){if(latest==null)continue;status="正在准备Folia样式…";ready=false;failed=false;lastDiagnostic="";process.Start();child=process;running=true;}
                     using var session=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
                     var diagnostics=Diagnostics(process.StandardError,session.Token);
@@ -109,17 +112,19 @@ internal sealed class FoliaClient : IDisposable
                     using(var connection=CancellationTokenSource.CreateLinkedTokenSource(session.Token))
                     {
                         connection.CancelAfter(10000);
+                        stage="等待渲染进程连接管道";
                         try{await pipe.WaitForConnectionAsync(connection.Token).ConfigureAwait(false);}
                         catch(OperationCanceledException) when(!lifetime.IsCancellationRequested){throw new IOException("Folia专用管道连接超时");}
                     }
                     using var writer=new StreamWriter(pipe,new UTF8Encoding(false),8192,true);
                     var send=Send(writer,first.Software,sessionEpoch,session.Token);
                     var watchdog=Watchdog(process,session.Token);
+                    stage="接收与解析渲染画面";
                     try{await Receive(pipe,session.Token).ConfigureAwait(false);}
                     finally{session.Cancel();StopChild();try{await send.ConfigureAwait(false);}catch(OperationCanceledException){}catch(IOException){}catch(InvalidOperationException){}try{await diagnostics.ConfigureAwait(false);}catch(OperationCanceledException){}try{await watchdog.ConfigureAwait(false);}catch(OperationCanceledException){}}
                 }
                 catch(Exception ex) when(ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception or ArgumentException or NotSupportedException or JsonException)
-                {status="Folia组件暂不可用，正在重试；当前使用Dango显示："+(lastDiagnostic.Length>0?lastDiagnostic:ex.Message);}
+                {string detail=DiagnosticLog.Report("Folia",stage,ex);status=(lastDiagnostic.Length>0?lastDiagnostic:detail)+"\n已回退Dango，正在重试";}
                 finally{running=false;ready=false;lock(gate){if(child==process){StopChild();child=null;}}process?.Dispose();var old=Interlocked.Exchange(ref frame,null);if(old!=null)ReturnFrame(old);}
                 if(!lifetime.IsCancellationRequested)await Task.Delay(1800,lifetime.Token).ConfigureAwait(false);
             }
@@ -151,7 +156,7 @@ internal sealed class FoliaClient : IDisposable
             }
         }
         catch(Exception ex) when(ex is IOException or InvalidOperationException or JsonException or ArgumentException)
-        {lastDiagnostic="歌词管道发送失败："+ex.Message;failed=true;ready=false;throw;}
+        {lastDiagnostic=DiagnosticLog.Report("Folia","发送歌词命名管道",ex);failed=true;ready=false;throw;}
         finally{StopChild();}
     }
     static object[] ToLines(LyricsTimeline timeline,long duration)
@@ -221,7 +226,7 @@ internal sealed class FoliaClient : IDisposable
     {
         try{while(!token.IsCancellationRequested){string? line=await reader.ReadLineAsync().ConfigureAwait(false);if(line==null)return;
             if(!line.StartsWith("PEAK_FOLIA_ERROR ",StringComparison.Ordinal))continue;
-            lastDiagnostic=line.Substring(17,Math.Min(500,line.Length-17));failed=true;ready=false;
+            lastDiagnostic=DiagnosticLog.Report("Folia前端","渲染进程报告",new InvalidOperationException(line.Substring(17,Math.Min(500,line.Length-17))));failed=true;ready=false;
             status="Folia失败，暂用Dango："+lastDiagnostic;
         }}
         catch(IOException){}catch(ObjectDisposedException){}
@@ -234,7 +239,7 @@ internal sealed class FoliaClient : IDisposable
             await Task.Delay(1000,token).ConfigureAwait(false);
             if(latest==null)return;
             if(MusicClock.Now-start>30000&&!ready)
-            {if(lastDiagnostic.Length==0)lastDiagnostic="样式启动超时；详细原因见 BepInEx/PeakDangoMusic-Folia.log";StopChild();return;}
+            {if(lastDiagnostic.Length==0)lastDiagnostic=DiagnosticLog.Report("Folia","等待首个有效画面",new TimeoutException("30秒未收到有效画面；详见 BepInEx/PeakDangoMusic-Folia.log"));StopChild();return;}
         }
     }
     public void Dispose(){latest=null;lifetime.Cancel();_ = Task.Run(StopChild);}

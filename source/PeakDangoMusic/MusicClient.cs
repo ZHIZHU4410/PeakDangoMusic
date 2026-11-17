@@ -1,19 +1,13 @@
 namespace PeakDangoMusic;
 
+// Muonium-native player is now the only runtime clock. Legacy desktop readers
+// remain as historical source; no CDP ports, launch scripts or SMTC workers start.
 internal sealed class MusicClient : IDisposable
 {
-    readonly LxClient lx;
-    readonly NativeMusicClient native=new();
-    int source;
-    internal MusicState Snapshot=>source!=0?native.Snapshot:lx.Snapshot;
-    internal MusicClient(MusicSettings settings)
-    {source=settings.EffectiveSource;lx=new LxClient(settings.Port.Value,settings.Enabled.Value && source==0);Configure(settings);}
-    internal void Configure(MusicSettings settings)
-    {
-        source=settings.EffectiveSource;
-        lx.Configure(settings.Port.Value,settings.Enabled.Value && source==0);
-        native.Configure(settings.NetEasePort.Value,settings.Enabled.Value && source!=0,source,settings.KugouLyricsFolder.Value);
-    }
-    internal void Reconnect(){if(source!=0)native.Reconnect();else lx.Reconnect();}
-    public void Dispose(){lx.Dispose();native.Dispose();}
+    readonly AggregatePlayer player;
+    internal MusicState Snapshot=>player.Snapshot;
+    internal MusicClient(MusicSettings settings,AggregatePlayer aggregate){player=aggregate;}
+    internal void Configure(MusicSettings settings){}
+    internal void Reconnect()=>player.Stop();
+    public void Dispose(){}
 }
