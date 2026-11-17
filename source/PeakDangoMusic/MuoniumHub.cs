@@ -1,3 +1,4 @@
+using System.Globalization;
 using DangoMusic.Core;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
@@ -7,6 +8,14 @@ namespace PeakDangoMusic;
 /// <summary>PEAK adaptation of Muonium's sidebar, discovery/library/account and persistent transport.</summary>
 internal sealed class MuoniumHub : IDisposable
 {
+    // Fixed metrics: every list row and every toolbar button keeps one size, so a click
+    // can never re-wrap text and stretch the surrounding layout.
+    const float SidebarWide=190, SidebarNarrow=140;
+    const float NavHeight=42, NavGap=6, PlatformHeight=40, PlatformGap=8;
+    const float TrackRowHeight=68, TrackRowGap=8, TrackActionWidth=86, TrackAddWidth=64, ColumnGap=8;
+    const float RowButtonHeight=46, PlaylistHeight=52;
+    const int TrackPageSize=60, PlaylistPageSize=60;
+
     readonly Plugin plugin;
     readonly MuoniumClient client=new();
     readonly PlayerLibrary library=new();
@@ -22,8 +31,27 @@ internal sealed class MuoniumHub : IDisposable
     GdMusicApi.Track? requested,current;
     JObject[] playlists=Array.Empty<JObject>();
     Texture2D? qr;
-    GUIStyle? heading,muted,card,nav,navSelected;
+    GUIStyle? heading,muted,messageStyle,card,cardOn,nav,navSelected,section,bigHeading,titleEntry,trackTitle;
     Font? titleFont;
+
+    // Per-frame allocation caches.
+    readonly List<string> trackLabels=new();
+    readonly struct PlaylistRow
+    {
+        internal readonly string Id,Name;internal readonly int Count;
+        internal PlaylistRow(string id,string name,int count){Id=id;Name=name;Count=count;}
+    }
+    readonly List<PlaylistRow> playlistRows=new();
+    GdMusicApi.Track[] cachedTracks=Array.Empty<GdMusicApi.Track>();
+    int cachedCount=-1;
+    float cachedLabelWidth=-1;
+    int cachedLibraryVersion=-1;
+    // Library views are rebuilt only when the library changes, not once per draw.
+    GdMusicApi.Track[] favoritesView=Array.Empty<GdMusicApi.Track>(),historyView=Array.Empty<GdMusicApi.Track>(),queueView=Array.Empty<GdMusicApi.Track>(),recentView=Array.Empty<GdMusicApi.Track>();
+    int viewVersion=-1;
+    long cachedPositionSecond=-1,cachedDurationSecond=-1;
+    string cachedPositionText="00:00",cachedDurationText="00:00";
+
     static readonly string[] Pages={"首页","搜索音乐","发现歌单","我的歌单","本地收藏","播放历史","播放队列","账号中心","悬浮歌词","连接与诊断"};
     internal MuoniumHub(Plugin owner){plugin=owner;plugin.Aggregate.TrackStarted+=Started;plugin.Aggregate.TrackEnded+=Ended;}
     bool Busy=>pending!=null;
@@ -32,21 +60,30 @@ internal sealed class MuoniumHub : IDisposable
     {
         if(heading!=null)return;
         heading=new GUIStyle(GUI.skin.label){fontSize=30,fontStyle=FontStyle.Bold,wordWrap=true};
+        bigHeading=new GUIStyle(heading){fontSize=22,wordWrap=false,clipping=TextClipping.Clip};
+        section=new GUIStyle(heading){fontSize=20};
         muted=new GUIStyle(GUI.skin.label){fontSize=14,wordWrap=true};muted.normal.textColor=new Color(.61f,.69f,.77f);
-        card=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleLeft,wordWrap=true,padding=new RectOffset(18,18,12,12),fontSize=17};
-        nav=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleLeft,padding=new RectOffset(16,12,8,8),fontSize=17};
+        // Single-line status text: fixed height plus clip means the footer never grows.
+        messageStyle=new GUIStyle(muted){wordWrap=false,clipping=TextClipping.Clip};
+        trackTitle=new GUIStyle(GUI.skin.label){fontSize=17,wordWrap=false,clipping=TextClipping.Clip};
+        card=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleLeft,wordWrap=false,clipping=TextClipping.Clip,padding=new RectOffset(14,10,6,6),fontSize=16};
+        cardOn=new GUIStyle(card);
+        cardOn.normal.background=GUI.skin.button.onNormal.background;
+        cardOn.hover.background=GUI.skin.button.onHover.background;
+        nav=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleLeft,padding=new RectOffset(16,12,6,6),fontSize=17,wordWrap=false,clipping=TextClipping.Clip};
         navSelected=new GUIStyle(nav);navSelected.normal.background=GUI.skin.button.onNormal.background;
     }
     internal void Tick()
     {
+        library.Flush(Time.unscaledTime);
         if(pending?.IsCompleted==true)
         {
             var task=pending;pending=null;
             try
             {
                 var data=task.GetAwaiter().GetResult();
-                if(data["tracks"] is JArray tracks)rows=ParseTracks(tracks);
-                if(data["playlists"] is JArray lists)playlists=lists.OfType<JObject>().ToArray();
+                if(data["tracks"] is JArray tracks){rows=ParseTracks(tracks);InvalidateTrackCache();}
+                if(data["playlists"] is JArray lists){playlists=lists.OfType<JObject>().ToArray();RebuildPlaylistRows();}
                 if(data["image"]!=null)
                 {
                     ClearQr();qr=new Texture2D(2,2);qr.LoadImage(Convert.FromBase64String((string)data["image"]!));qr.filterMode=FilterMode.Point;
@@ -92,7 +129,7 @@ internal sealed class MuoniumHub : IDisposable
     {
         if(playback!=null||plugin.Aggregate.Busy){message="正在加载音频，请稍候";return;}
         Activate();requested=track;
-        if(replaceQueue){library.Queue.Clear();library.Queue.AddRange(rows.Length>0?rows:new[]{track});queueIndex=library.Queue.FindIndex(t=>PlayerLibrary.Key(t)==PlayerLibrary.Key(track));library.Save();}
+        if(replaceQueue){library.Queue.Clear();library.Queue.AddRange(rows.Length>0?rows:new[]{track});queueIndex=library.Queue.FindIndex(t=>PlayerLibrary.Key(t)==PlayerLibrary.Key(track));library.Touch();}
         if(track.Source is "ncm" or "qq")playback=client.Call("resolve",track.Source,new JObject{["trackId"]=track.Id,["track"]=new JObject{["id"]=track.Id,["title"]=track.Title,["artist"]=track.Artist,["album"]=track.Album}});
         else plugin.Aggregate.Play(track,plugin.Settings.AggregateBitrate.Value);
     }
@@ -105,31 +142,55 @@ internal sealed class MuoniumHub : IDisposable
         if(index<0||index>=library.Queue.Count){message="播放队列已结束";return;}
         queueIndex=index;Play(library.Queue[index]);
     }
+    void RefreshViews()
+    {
+        if(viewVersion==library.Version)return;
+        viewVersion=library.Version;
+        favoritesView=library.Favorites.ToArray();historyView=library.History.ToArray();queueView=library.Queue.ToArray();
+        int recent=Math.Min(5,historyView.Length);
+        recentView=recent==historyView.Length?historyView:historyView[0..recent];
+    }
     internal void Draw(float width,float height)
     {
         Styles();
-        float sidebar=width<800?140:190;
-        GUILayout.BeginHorizontal(GUILayout.Height(Mathf.Max(180,height-320)));
+        RefreshViews();
+        float sidebar=width<800?SidebarNarrow:SidebarWide;
+        GUILayout.BeginHorizontal(GUILayout.Height(Mathf.Max(160,height-260)));
         GUILayout.BeginVertical(GUI.skin.box,GUILayout.Width(sidebar));
-        GUILayout.Label("MUONIUM",new GUIStyle(heading!){fontSize=22});GUILayout.Label("PEAK PLAYER",muted);
+        GUILayout.Label("MUONIUM",bigHeading);GUILayout.Label("PEAK PLAYER",muted);GUILayout.Space(8);
         sidebarScroll=GUILayout.BeginScrollView(sidebarScroll);
-        for(int i=0;i<Pages.Length;i++)if(GUILayout.Button(Pages[i],page==i?navSelected!:nav!,GUILayout.Height(43))){page=i;scroll=Vector2.zero;}
-        GUILayout.EndScrollView();GUILayout.EndVertical();GUILayout.Space(16);
+        for(int i=0;i<Pages.Length;i++)
+        {
+            if(GUILayout.Button(Pages[i],page==i?navSelected!:nav!,GUILayout.Height(NavHeight))){page=i;scroll=Vector2.zero;}
+            if(i<Pages.Length-1)GUILayout.Space(NavGap);
+        }
+        GUILayout.EndScrollView();GUILayout.EndVertical();
+        GUILayout.Space(16);
         GUILayout.BeginVertical(GUILayout.ExpandWidth(true));
         if(page is not (8 or 9))
         {
             GUILayout.BeginHorizontal();
             string[] sources={"网易云 · 原生","QQ · 原生","GD聚合"};
             bool sourceEnabled=GUI.enabled;GUI.enabled=sourceEnabled&&!Busy;
-            for(int i=0;i<3;i++)if(GUILayout.Button(sources[i],platform==i?navSelected!:nav!,GUILayout.Height(40)))
-            {platform=i;polling=false;ClearQr();rows=Array.Empty<GdMusicApi.Track>();playlists=Array.Empty<JObject>();message="已切换平台";loggedIn=false;accountName="未登录";}
+            for(int i=0;i<3;i++)
+            {
+                if(GUILayout.Button(sources[i],platform==i?navSelected!:nav!,GUILayout.Height(PlatformHeight)))
+                {platform=i;polling=false;ClearQr();rows=Array.Empty<GdMusicApi.Track>();InvalidateTrackCache();playlists=Array.Empty<JObject>();playlistRows.Clear();message="已切换平台";loggedIn=false;accountName="未登录";}
+                if(i<2)GUILayout.Space(PlatformGap);
+            }
             GUI.enabled=sourceEnabled;
             GUILayout.EndHorizontal();
+            GUILayout.Space(8);
             if(platform==2)
             {
                 var s=plugin.Settings;int selected=s.AggregatePlatform.Value;
-                GUILayout.BeginHorizontal();if(GUILayout.Button("‹",GUILayout.Width(40)))s.AggregatePlatform.Value=(selected+9)%10;
-                GUILayout.Label(GdMusicApi.Names[s.AggregatePlatform.Value],GUILayout.Height(40));if(GUILayout.Button("›",GUILayout.Width(40)))s.AggregatePlatform.Value=(selected+1)%10;GUILayout.EndHorizontal();
+                GUILayout.BeginHorizontal();
+                if(GUILayout.Button("‹",nav!,GUILayout.Width(40),GUILayout.Height(PlatformHeight)))s.AggregatePlatform.Value=(selected+9)%10;
+                GUILayout.Space(PlatformGap);
+                GUILayout.Label(GdMusicApi.Names[s.AggregatePlatform.Value],GUILayout.Height(PlatformHeight),GUILayout.Width(140));
+                GUILayout.Space(PlatformGap);
+                if(GUILayout.Button("›",nav!,GUILayout.Width(40),GUILayout.Height(PlatformHeight)))s.AggregatePlatform.Value=(selected+1)%10;
+                GUILayout.EndHorizontal();
             }
         }
         scroll=GUILayout.BeginScrollView(scroll);
@@ -139,80 +200,167 @@ internal sealed class MuoniumHub : IDisposable
             case 1:Search();break;
             case 2:Discover();break;
             case 3:Library();break;
-            case 4:TrackRows(library.Favorites.ToArray(),"本地收藏");break;
-            case 5:TrackRows(library.History.ToArray(),"最近播放");break;
+            case 4:TrackRows(favoritesView,"本地收藏");break;
+            case 5:TrackRows(historyView,"最近播放");break;
             case 6:Queue();break;
             case 7:Account();break;
             case 8:MusicPanel.DrawLyricsSettings();break;
             case 9:Diagnostics();break;
         }
-        GUILayout.Space(12);GUILayout.Label(message,muted);GUILayout.EndScrollView();GUILayout.EndVertical();GUILayout.EndHorizontal();
+        GUILayout.Space(10);
+        GUILayout.Label(message,messageStyle,GUILayout.Height(24));
+        GUILayout.EndScrollView();GUILayout.EndVertical();GUILayout.EndHorizontal();
         Transport();
     }
-    bool ActionButton(string label){bool enabled=GUI.enabled;GUI.enabled=enabled&&!Busy;bool click=GUILayout.Button(label,card,GUILayout.MinHeight(46));GUI.enabled=enabled;return click;}
+    bool ActionButton(string label){bool enabled=GUI.enabled;GUI.enabled=enabled&&!Busy;bool click=GUILayout.Button(label,card,GUILayout.Height(RowButtonHeight));GUI.enabled=enabled;return click;}
     void Home()
     {
         GUILayout.Space(18);GUILayout.Label("让音乐陪你继续攀登",heading);GUILayout.Label("Muonium 曲库与账号  ·  GD 多平台聚合  ·  Dango / Folia 悬浮歌词",muted);GUILayout.Space(18);
-        GUILayout.BeginHorizontal();if(ActionButton("搜索喜欢的音乐  →"))page=1;if(ActionButton("发现精选歌单  →")){page=2;LoadDiscover();}GUILayout.EndHorizontal();
-        GUILayout.BeginHorizontal();if(ActionButton("账号与云端曲库  →")){page=7;if(platform!=2)Request("account",Source);}if(ActionButton("我的本地收藏  →"))page=4;GUILayout.EndHorizontal();
+        GUILayout.BeginHorizontal();if(ActionButton("搜索喜欢的音乐  →"))page=1;GUILayout.Space(10);if(ActionButton("发现精选歌单  →")){page=2;LoadDiscover();}GUILayout.EndHorizontal();
+        GUILayout.Space(8);
+        GUILayout.BeginHorizontal();if(ActionButton("账号与云端曲库  →")){page=7;if(platform!=2)Request("account",Source);}GUILayout.Space(10);if(ActionButton("我的本地收藏  →"))page=4;GUILayout.EndHorizontal();
+        GUILayout.Space(8);
         if(platform==0&&ActionButton("网易云每日推荐 · 登录后使用")){page=1;Request("daily","ncm");}
-        if(library.History.Count>0){GUILayout.Space(20);TrackRows(library.History.Take(5).ToArray(),"继续听");}
+        if(recentView.Length>0){GUILayout.Space(20);TrackRows(recentView,"继续听");}
     }
     void Search()
     {
-        GUILayout.Label("搜索音乐",heading);query=GUILayout.TextField(query,200,GUILayout.MinHeight(44));
+        GUILayout.Label("搜索音乐",section);query=GUILayout.TextField(query,200,GUILayout.Height(44));
+        GUILayout.Space(8);
         if(ActionButton("搜索")){searchPage=1;DoSearch();}
-        GUILayout.BeginHorizontal();if(ActionButton("上一页")&&searchPage>1){searchPage--;DoSearch();}if(ActionButton("下一页")){searchPage++;DoSearch();}GUILayout.EndHorizontal();
+        GUILayout.Space(8);
+        GUILayout.BeginHorizontal();if(ActionButton("上一页")&&searchPage>1){searchPage--;DoSearch();}GUILayout.Space(10);if(ActionButton("下一页")){searchPage++;DoSearch();}GUILayout.EndHorizontal();
+        GUILayout.Space(10);
         TrackRows(platform==2?plugin.Aggregate.Results:rows,"搜索结果 · 第 "+searchPage+" 页");
     }
     void DoSearch(){if(query.Trim().Length==0){message="请输入歌名或歌手";return;}if(platform==2){Activate();plugin.Aggregate.Search(Source,query,searchPage);}else Request("search",Source,new JObject{["query"]=query,["page"]=searchPage});}
     void LoadDiscover(){if(platform==2){message="GD聚合提供歌曲搜索；精选歌单请使用原生平台";return;}Request("discover",Source);}
-    void Discover(){GUILayout.Label("发现歌单",heading);if(ActionButton("刷新推荐歌单"))LoadDiscover();PlaylistRows();}
+    void Discover(){GUILayout.Label("发现歌单",section);if(ActionButton("刷新推荐歌单"))LoadDiscover();GUILayout.Space(10);PlaylistRows();}
     void Library()
     {
-        GUILayout.Label("我的歌单",heading);
+        GUILayout.Label("我的歌单",section);
         if(platform!=2&&ActionButton("加载账号歌单"))Request("library",Source);
-        GUILayout.Label("通过平台歌单ID打开",muted);playlistId=GUILayout.TextField(playlistId,24,GUILayout.MinHeight(42));
-        if(platform!=2&&ActionButton("打开歌单"))Request("playlist",Source,new JObject{["playlistId"]=playlistId});PlaylistRows();TrackRows(rows,"歌单歌曲");
+        GUILayout.Space(10);
+        GUILayout.Label("通过平台歌单ID打开",muted);playlistId=GUILayout.TextField(playlistId,24,GUILayout.Height(42));
+        GUILayout.Space(8);
+        if(platform!=2&&ActionButton("打开歌单"))Request("playlist",Source,new JObject{["playlistId"]=playlistId});
+        GUILayout.Space(10);PlaylistRows();GUILayout.Space(10);TrackRows(rows,"歌单歌曲");
+    }
+    void RebuildPlaylistRows()
+    {
+        playlistRows.Clear();
+        foreach(var list in playlists.Take(PlaylistPageSize))
+        {
+            string id=(string?)list["id"]??"",name=(string?)list["name"]??"歌单";
+            int count=(int?)list["trackCount"]??0;
+            playlistRows.Add(new PlaylistRow(id,name,count));
+        }
     }
     void PlaylistRows()
     {
-        foreach(var list in playlists)
+        if(playlistRows.Count==0){GUILayout.Label("还没有歌单，先刷新推荐歌单或加载账号歌单",muted);return;}
+        foreach(var row in playlistRows)
         {
-            string id=(string?)list["id"]??"",name=(string?)list["name"]??"歌单";int count=(int?)list["trackCount"]??0;
-            if(ActionButton(name+(count>0?" · "+count+" 首":""))){playlistId=id;page=3;rows=Array.Empty<GdMusicApi.Track>();Request("playlist",Source,new JObject{["playlistId"]=id});}
+            if(GUILayout.Button(row.Name+(row.Count>0?" · "+row.Count+" 首":""),card,GUILayout.Height(PlaylistHeight)))
+            {playlistId=row.Id;page=3;rows=Array.Empty<GdMusicApi.Track>();InvalidateTrackCache();Request("playlist",Source,new JObject{["playlistId"]=row.Id});}
+            GUILayout.Space(6);
         }
     }
     void TrackRows(GdMusicApi.Track[] tracks,string title)
     {
-        GUILayout.Label(title,new GUIStyle(heading!){fontSize=20});
-        if(tracks.Length==0)GUILayout.Label("还没有歌曲，搜索或加载歌单开始聆听",muted);
-        foreach(var track in tracks.Take(200))
+        GUILayout.Label(title,section);
+        GUILayout.Space(6);
+        if(tracks.Length==0)
         {
-            GUILayout.BeginHorizontal();
-            if(GUILayout.Button(track.Title+"\n"+track.Artist+"  ·  "+track.Album,card!,GUILayout.MinHeight(60))){rows=tracks;Play(track,true);}
-            if(GUILayout.Button(library.Favorite(track)?"已收藏":"收藏",GUILayout.Width(78),GUILayout.Height(60)))library.Toggle(track);
-            if(GUILayout.Button("加入",GUILayout.Width(60),GUILayout.Height(60))){if(library.Queue.Count<200){library.Queue.Add(track);library.Save();message="已加入播放队列";}}
-            GUILayout.EndHorizontal();
+            // Fixed-height placeholder: an empty result is exactly as tall as a loaded list,
+            // so switching pages never makes the panel jump.
+            GUILayout.Label("还没有歌曲，搜索或加载歌单开始聆听",muted,GUILayout.Height(24));
+            GUILayout.Space(TrackRowHeight*2);
+            return;
+        }
+        int count=Math.Min(tracks.Length,TrackPageSize);
+        float pitch=TrackRowHeight+TrackRowGap;
+        Rect area=GUILayoutUtility.GetRect(GUIContent.none,GUIStyle.none,GUILayout.MinWidth(0),GUILayout.ExpandWidth(true),GUILayout.Height(count*pitch));
+        float mainWidth=Mathf.Max(120f,area.width-TrackActionWidth-TrackAddWidth-ColumnGap*2);
+        RebuildTrackCache(tracks,count,mainWidth);
+        for(int i=0;i<count;i++)
+        {
+            var track=tracks[i];float y=area.y+i*pitch;
+            if(GUI.Button(new Rect(area.x,y,mainWidth,TrackRowHeight),trackLabels[i],card))
+            {rows=tracks;Play(track,true);}
+            bool favorite=library.Favorite(track);
+            if(GUI.Button(new Rect(area.x+mainWidth+ColumnGap,y,TrackActionWidth,TrackRowHeight),favorite?"已收藏":"收藏",favorite?cardOn:card))
+                library.Toggle(track);
+            if(GUI.Button(new Rect(area.x+mainWidth+ColumnGap+TrackActionWidth+ColumnGap,y,TrackAddWidth,TrackRowHeight),"加入",card))
+            {if(library.Queue.Count<200){library.Queue.Add(track);library.Touch();message="已加入播放队列";}}
+        }
+        if(tracks.Length>TrackPageSize){GUILayout.Space(6);GUILayout.Label("已显示前 "+TrackPageSize+" 首；用搜索分页查看其余结果",muted);}
+    }
+    void RebuildTrackCache(GdMusicApi.Track[] tracks,int count,float width)
+    {
+        if(ReferenceEquals(cachedTracks,tracks)&&cachedCount==count&&Mathf.Abs(cachedLabelWidth-width)<.5f&&cachedLibraryVersion==library.Version)return;
+        cachedTracks=tracks;cachedCount=count;cachedLabelWidth=width;cachedLibraryVersion=library.Version;
+        trackLabels.Clear();
+        for(int i=0;i<count;i++)trackLabels.Add(TrackLabel(tracks[i],width));
+    }
+    void InvalidateTrackCache(){cachedTracks=Array.Empty<GdMusicApi.Track>();cachedCount=-1;trackLabels.Clear();}
+    static string TrackLabel(GdMusicApi.Track track,float width)
+    {
+        float textWidth=Mathf.Max(40f,width-24);
+        string meta=track.Artist.Length>0?(track.Album.Length>0?track.Artist+" · "+track.Album:track.Artist):track.Album;
+        return Fit(track.Title,textWidth)+"\n"+Fit(meta,textWidth);
+    }
+    // Binary search on measured width: the label always fits its cell, never overflows.
+    static string Fit(string text,float width)
+    {
+        var style=FitStyle;
+        if(text.Length==0||style.CalcSize(new GUIContent(text)).x<=width)return text;
+        int low=0,high=text.Length;
+        while(low<high)
+        {
+            int mid=(low+high+1)/2;
+            if(style.CalcSize(new GUIContent(text.Substring(0,mid)+"…")).x<=width)low=mid;else high=mid-1;
+        }
+        return low<=0?"…":text.Substring(0,low).TrimEnd()+"…";
+    }
+    static GUIStyle? fitStyle;
+    static GUIStyle FitStyle
+    {
+        get
+        {
+            if(fitStyle==null)
+            {
+                fitStyle=new GUIStyle(GUI.skin.label){fontSize=16,wordWrap=false};
+                fitStyle.normal.textColor=Color.white;
+            }
+            return fitStyle;
         }
     }
-    void Queue(){GUILayout.Label("播放队列",heading);if(ActionButton("清空队列")){library.Queue.Clear();queueIndex=-1;library.Save();}TrackRows(library.Queue.ToArray(),"队列曲目");}
+    void Queue(){GUILayout.Label("播放队列",section);if(ActionButton("清空队列")){library.Queue.Clear();queueIndex=-1;library.Touch();RefreshViews();}GUILayout.Space(10);TrackRows(queueView,"队列曲目");}
     void Account()
     {
-        GUILayout.Label("账号中心",heading);
+        GUILayout.Label("账号中心",section);
         if(platform==2){GUILayout.Label("GD聚合不需要登录。网易云/QQ账号分别在原生平台管理。",muted);return;}
-        GUILayout.Label(accountName,new GUIStyle(heading!){fontSize=22});
+        GUILayout.Label(accountName,bigHeading);
         GUILayout.Label("使用对应平台手机App扫码，凭证由Windows当前用户加密保存。退出登录会清除本模组的对应平台登录态。",muted);
-        GUILayout.BeginHorizontal();if(ActionButton("生成登录二维码")){polling=false;ClearQr();Request("qr",Source);}if(ActionButton("刷新账号状态"))Request("account",Source);if(ActionButton("退出此账号")){polling=false;ClearQr();Request("logout",Source);}GUILayout.EndHorizontal();
-        if(qr!=null){var rect=GUILayoutUtility.GetRect(280,280,GUILayout.Width(280),GUILayout.Height(280));GUI.DrawTexture(rect,qr,ScaleMode.ScaleToFit);}
+        GUILayout.Space(10);
+        GUILayout.BeginHorizontal();
+        if(ActionButton("生成登录二维码")){polling=false;ClearQr();Request("qr",Source);}GUILayout.Space(10);
+        if(ActionButton("刷新账号状态"))Request("account",Source);GUILayout.Space(10);
+        if(ActionButton("退出此账号")){polling=false;ClearQr();Request("logout",Source);}
+        GUILayout.EndHorizontal();
+        if(qr!=null){GUILayout.Space(10);var rect=GUILayoutUtility.GetRect(280,280,GUILayout.Width(280),GUILayout.Height(280));GUI.DrawTexture(rect,qr,ScaleMode.ScaleToFit);}
     }
     void Diagnostics()
     {
-        GUILayout.Label("连接与诊断",heading);
+        GUILayout.Label("连接与诊断",section);
         GUILayout.Label("当前只运行Muonium原生曲库与GD聚合，不启动旧桌面播放器接口。音乐开关与歌词显示开关互相独立。",muted);
-        plugin.Settings.PlayerEnabled.Value=GUILayout.Toggle(plugin.Settings.PlayerEnabled.Value,"启用游戏内播放器");
+        GUILayout.Space(8);
+        plugin.Settings.PlayerEnabled.Value=GUILayout.Toggle(plugin.Settings.PlayerEnabled.Value,"启用游戏内播放器",GUILayout.Height(RowButtonHeight));
+        GUILayout.Space(8);
         string errors=DiagnosticLog.Snapshot;
         GUILayout.Label(errors.Length>0?errors:"当前没有最近错误",muted);
+        GUILayout.Space(8);
         if(ActionButton("复制错误详情"))GUIUtility.systemCopyBuffer=errors;
     }
     void Transport()
@@ -220,24 +368,40 @@ internal sealed class MuoniumHub : IDisposable
         GUILayout.Space(12);GUILayout.BeginVertical(GUI.skin.box);
         var state=plugin.Aggregate.Snapshot;
         GUILayout.BeginHorizontal();
-        GUILayout.BeginVertical(GUILayout.Width(220));GUILayout.Label(current?.Title??"选择一首音乐");GUILayout.Label(current?.Artist??"PEAK · Muonium",muted);GUILayout.EndVertical();
-        if(GUILayout.Button("上一首",GUILayout.Width(85),GUILayout.Height(42)))Next(-1);
-        if(GUILayout.Button(state.Playing?"暂停":"播放",GUILayout.Width(85),GUILayout.Height(42)))plugin.Aggregate.TogglePause();
-        if(GUILayout.Button("下一首",GUILayout.Width(85),GUILayout.Height(42)))Next(1);
-        if(GUILayout.Button(new[]{"顺序播放","随机播放","单曲循环"}[playMode],GUILayout.Width(110),GUILayout.Height(42)))playMode=(playMode+1)%3;
-        if(GUILayout.Button("停止",GUILayout.Width(65),GUILayout.Height(42)))plugin.Aggregate.Stop();
+        GUILayout.BeginVertical(GUILayout.Width(220));GUILayout.Label(current?.Title??"选择一首音乐",trackTitle);GUILayout.Label(current?.Artist??"PEAK · Muonium",messageStyle,GUILayout.Height(20));GUILayout.EndVertical();
+        GUILayout.Space(8);
+        if(GUILayout.Button("上一首",nav!,GUILayout.Width(85),GUILayout.Height(42)))Next(-1);GUILayout.Space(6);
+        if(GUILayout.Button(state.Playing?"暂停":"播放",nav!,GUILayout.Width(85),GUILayout.Height(42)))plugin.Aggregate.TogglePause();GUILayout.Space(6);
+        if(GUILayout.Button("下一首",nav!,GUILayout.Width(85),GUILayout.Height(42)))Next(1);GUILayout.Space(6);
+        if(GUILayout.Button(new[]{"顺序播放","随机播放","单曲循环"}[playMode],nav!,GUILayout.Width(110),GUILayout.Height(42)))playMode=(playMode+1)%3;GUILayout.Space(6);
+        if(GUILayout.Button("停止",nav!,GUILayout.Width(65),GUILayout.Height(42)))plugin.Aggregate.Stop();
         GUILayout.FlexibleSpace();GUILayout.Label("音量",GUILayout.Width(44));plugin.Settings.AggregateVolume.Value=GUILayout.HorizontalSlider(plugin.Settings.AggregateVolume.Value,0,1,GUILayout.Width(110));
         GUILayout.EndHorizontal();
-        if(state.DurationMs>0){GUILayout.BeginHorizontal();GUILayout.Label(Clock(state.PositionMs),GUILayout.Width(60));float fraction=(float)state.PositionMs/state.DurationMs;float next=GUILayout.HorizontalSlider(fraction,0,1);if(Math.Abs(next-fraction)>.001f)plugin.Aggregate.Seek(next);GUILayout.Label(Clock(state.DurationMs),GUILayout.Width(60));GUILayout.EndHorizontal();}
-        GUILayout.Label(playback!=null?"正在从原生曲库解析音频…":plugin.Aggregate.Status,muted);GUILayout.EndVertical();
+        if(state.DurationMs>0)
+        {
+            long positionSecond=state.PositionMs/1000,durationSecond=state.DurationMs/1000;
+            if(positionSecond!=cachedPositionSecond){cachedPositionSecond=positionSecond;cachedPositionText=Clock(state.PositionMs);}
+            if(durationSecond!=cachedDurationSecond){cachedDurationSecond=durationSecond;cachedDurationText=Clock(state.DurationMs);}
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(cachedPositionText,GUILayout.Width(60));
+            float fraction=(float)state.PositionMs/state.DurationMs;float next=GUILayout.HorizontalSlider(fraction,0,1);
+            if(Math.Abs(next-fraction)>.001f)plugin.Aggregate.Seek(next);
+            GUILayout.Label(cachedDurationText,GUILayout.Width(60));
+            GUILayout.EndHorizontal();
+        }
+        GUILayout.Label(playback!=null?"正在从原生曲库解析音频…":plugin.Aggregate.Status,messageStyle,GUILayout.Height(24));GUILayout.EndVertical();
     }
-    static string Clock(long ms)=>TimeSpan.FromMilliseconds(ms).ToString(@"mm\:ss");
+    static string Clock(long ms)=>TimeSpan.FromMilliseconds(ms).ToString(@"mm\:ss",CultureInfo.InvariantCulture);
     void ClearQr(){if(qr!=null)UnityEngine.Object.Destroy(qr);qr=null;}
     internal void DrawTitleEntry(bool open)
     {
         if(open||UnityEngine.SceneManagement.SceneManager.GetActiveScene().name!="Title")return;
-        titleFont??=Font.CreateDynamicFontFromOSFont(new[]{"Microsoft YaHei","Arial"},19);
-        if(GUI.Button(new Rect(Screen.width-260,Screen.height-76,230,48),"♫ 音乐播放器",new GUIStyle(GUI.skin.button){font=titleFont,fontSize=19}))plugin.OpenPlayer();
+        if(titleEntry==null)
+        {
+            titleFont=Font.CreateDynamicFontFromOSFont(new[]{"Microsoft YaHei","Arial"},19);
+            titleEntry=new GUIStyle(GUI.skin.button){font=titleFont,fontSize=19};
+        }
+        if(GUI.Button(new Rect(Screen.width-260,Screen.height-76,230,48),"♫ 音乐播放器",titleEntry))plugin.OpenPlayer();
     }
     public void Dispose(){client.Dispose();ClearQr();if(titleFont!=null)UnityEngine.Object.Destroy(titleFont);plugin.Aggregate.TrackStarted-=Started;plugin.Aggregate.TrackEnded-=Ended;}
 }

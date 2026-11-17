@@ -9,7 +9,7 @@ namespace PeakDangoMusic;
 public static class MusicPanel
 {
     static string? portText,pathText;
-    static GUIStyle? hint,title,rowLabel,valueStyle,buttonStyle,presetStyle,selectedStyle,selectedPresetStyle,sliderTrack;
+    static GUIStyle? hint,title,rowLabel,valueStyle,buttonStyle,presetStyle,selectedStyle,selectedPresetStyle,sliderTrack,noticeStyle;
     static Texture2D? pressedTexture,selectedTexture;
     static Font? numericFont;
     static GUISkin? styleSkin;
@@ -19,7 +19,10 @@ public static class MusicPanel
     static float feedbackAt=-10;
     static string feedback="";
     static string fontSearch="",fontFolderEdit="";
-    const float RowLabelWidth=144,ValueWidth=96,ControlGap=12;
+    const float RowLabelWidth=144,ValueWidth=96,ControlGap=12,GridColumnGap=16,GridRowGap=10;
+    // One control height for the whole panel, derived from the skin font so a wrapped or
+    // pressed label can never change a row's size.
+    static float rowHeight=48;
     static readonly string[] Modes={"整句","单词","逐字（整句）"};
     static readonly string[] Tabs={"歌词显示与位置","动画与效果","Folia歌词样式","字体"};
     static readonly string[] Sources={"BLF / LX","原版网易云","酷狗音乐","QQ音乐","GD聚合音乐","系统媒体会话"};
@@ -31,9 +34,14 @@ public static class MusicPanel
     {
         if(ReferenceEquals(styleSkin,GUI.skin))return;
         styleSkin=GUI.skin;
+        float skinSize=GUI.skin.button.fontSize>0?GUI.skin.button.fontSize:18f;
+        // Height covers a full glyph line plus the skin's vertical padding, so every cell
+        // wraps its text instead of clipping or growing when it is pressed.
+        rowHeight=Mathf.Max(48f,Mathf.Ceil(skinSize*1.5f)+GUI.skin.button.padding.vertical+2f);
         hint=new GUIStyle(GUI.skin.label){wordWrap=true,fontSize=14};
         title=new GUIStyle(GUI.skin.label){wordWrap=true,fontStyle=FontStyle.Bold,fontSize=20};
-        rowLabel=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleLeft,wordWrap=true,fontSize=16,margin=new RectOffset()};
+        rowLabel=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleLeft,wordWrap=false,clipping=TextClipping.Clip,fontSize=16,margin=new RectOffset()};
+        noticeStyle=new GUIStyle(GUI.skin.label){wordWrap=false,clipping=TextClipping.Clip,fontSize=14};
         valueStyle=new GUIStyle(GUI.skin.label){alignment=TextAnchor.MiddleRight,fontSize=15,margin=new RectOffset(),padding=new RectOffset()};
         sliderTrack=new GUIStyle(GUI.skin.horizontalSlider){fixedHeight=24,margin=new RectOffset(),padding=new RectOffset(),border=new RectOffset()};
         foreach(var state in new[]{sliderTrack.normal,sliderTrack.hover,sliderTrack.active,sliderTrack.focused})state.background=null;
@@ -43,7 +51,7 @@ public static class MusicPanel
         if(selectedTexture!=null)UnityEngine.Object.Destroy(selectedTexture);
         pressedTexture=ButtonSurface(new Color(.055f,.09f,.12f,1));
         selectedTexture=ButtonSurface(new Color(.10f,.31f,.35f,1));
-        buttonStyle=new GUIStyle(GUI.skin.button){border=new RectOffset(),wordWrap=true};
+        buttonStyle=new GUIStyle(GUI.skin.button){border=new RectOffset(),wordWrap=false,clipping=TextClipping.Clip};
         buttonStyle.active.background=pressedTexture;
         buttonStyle.onActive.background=pressedTexture;
         buttonStyle.active.textColor=Color.white;
@@ -51,7 +59,7 @@ public static class MusicPanel
         presetStyle=new GUIStyle(buttonStyle)
         {
             alignment=TextAnchor.MiddleLeft,wordWrap=false,clipping=TextClipping.Clip,
-            padding=new RectOffset(12,12,10,10),margin=new RectOffset(0,0,0,0),fixedHeight=48
+            padding=new RectOffset(12,12,10,10),margin=new RectOffset(0,0,0,0),fixedHeight=rowHeight
         };
         selectedStyle=new GUIStyle(buttonStyle);
         selectedStyle.normal.background=GUI.skin.button.onNormal.background??selectedTexture;
@@ -121,11 +129,11 @@ public static class MusicPanel
             if(lyricIndex>=0 && state.Timeline.Lines[lyricIndex].Words is not {Count:>0})
                 GUILayout.Label("当前歌词只有行时间，逐字同步为估算。",hint);
         }
-        if(state.Title.Length>0)
+        // Fixed slots: the status area keeps its height before and after playback starts.
+        GUILayout.Label(state.Title.Length>0?BalancedTitle(state.Title+" — "+state.Artist):"",hint,GUILayout.Height(44));
         {
-            GUILayout.Label(new GUIContent(BalancedTitle(state.Title+" — "+state.Artist)));
             long position=state.PositionAt(MusicClock.Now)??state.PositionMs;
-            GUILayout.Label(new GUIContent((state.Playing?"播放中  ":"已暂停  ")+TimeText(position)+" / "+TimeText(state.DurationMs)),valueStyle);
+            GUILayout.Label(new GUIContent((state.Playing?"播放中  ":"已暂停  ")+TimeText(position)+" / "+TimeText(state.DurationMs)),valueStyle,GUILayout.Height(24));
         }
         string errors=DiagnosticLog.Snapshot;
         if(errors.Length>0)
@@ -145,7 +153,7 @@ public static class MusicPanel
             string name=s.EffectiveSource==2?"酷狗音乐":"QQ音乐";
             GUILayout.Label(s.EffectiveSource==2?"通过酷狗本机播放接口同步，不扫描播放器控件。":"读取QQ音乐的系统媒体会话与进度。",hint);
             GUILayout.Label(s.EffectiveSource==2?"酷狗优先读取本机KRC原版逐字歌词，再尝试公开曲库。":"QQ音乐优先匹配本平台同步歌词；接口无结果时尝试备用曲库。",hint);
-            if(s.EffectiveSource==2){GUILayout.Label("酷狗歌词缓存目录（留空自动查找）",hint);s.KugouLyricsFolder.Value=GUILayout.TextField(s.KugouLyricsFolder.Value,GUILayout.MinHeight(40));}
+            if(s.EffectiveSource==2){GUILayout.Label("酷狗歌词缓存目录（留空自动查找）",hint);s.KugouLyricsFolder.Value=GUILayout.TextField(s.KugouLyricsFolder.Value,GUILayout.Height(44));}
             if(Button("重新连接"+name))plugin.Client.Reconnect();
             GUILayout.Label(s.EffectiveSource==2?"先完全退出酷狗，再运行安装包内“启动酷狗歌词连接.cmd”，打开推荐页并播放。":"QQ音乐需提供有效系统媒体会话进度。",hint);
             if(s.EffectiveSource==3)GUILayout.Label("QQ音乐尚未在本机安装，当前适配待实机验证。",hint);
@@ -165,7 +173,7 @@ public static class MusicPanel
         GUILayout.Space(8);
         GUILayout.BeginHorizontal();
         GUILayout.Label("端口",GUILayout.Width(48));GUILayout.Space(8);
-        portText=GUILayout.TextField(portText??s.Port.Value.ToString(),6,GUILayout.MinWidth(0),GUILayout.MinHeight(48));
+        portText=GUILayout.TextField(portText??s.Port.Value.ToString(),6,GUILayout.MinWidth(0),GUILayout.Height(46));
         GUILayout.Space(10);
         if(Button("应用端口",110))
         {
@@ -175,7 +183,7 @@ public static class MusicPanel
         GUILayout.EndHorizontal();
         GUILayout.Space(16);GUILayout.Label("播放器路径（可选）");
         GUILayout.Label("手动打开播放器时可留空；填写 exe 路径后可用下方按钮启动。",hint);
-        pathText=GUILayout.TextField(pathText??s.PlayerPath.Value,GUILayout.MinWidth(0),GUILayout.MinHeight(48));
+        pathText=GUILayout.TextField(pathText??s.PlayerPath.Value,GUILayout.MinWidth(0),GUILayout.Height(46));
         GUILayout.Space(10);GUILayout.BeginHorizontal();
         if(Button("打开 BLF / LX"))
         {
@@ -188,7 +196,8 @@ public static class MusicPanel
         GUILayout.EndHorizontal();
         GUILayout.Space(14);
         if(Button("重新加载歌词字体"))plugin.Renderer.RetryFonts();
-        if(plugin.Notice.Length>0){GUILayout.Space(12);GUILayout.Label(plugin.Notice,hint);}
+        GUILayout.Space(12);
+        GUILayout.Label(plugin.Notice.Length>0?plugin.Notice:"",noticeStyle!,GUILayout.Height(22));
         GUILayout.Space(24);SectionTitle("使用提示");
         GUILayout.Label("主菜单、机场、地图和设置界面均可接续显示歌词。音乐由播放器独立播放，不随窗口暂停。联机队友继续运行。",hint);
     }
@@ -198,15 +207,9 @@ public static class MusicPanel
     {
         var s=plugin.Settings;var player=plugin.Aggregate;
         GUILayout.Label("GD聚合平台（全部10项）",hint);
-        for(int i=0;i<GdMusicApi.Keys.Length;i+=2)
-        {
-            GUILayout.BeginHorizontal();
-            for(int j=i;j<Math.Min(i+2,GdMusicApi.Keys.Length);j++)
-                if(GUILayout.Button(GdMusicApi.Names[j],s.AggregatePlatform.Value==j?selectedStyle!:buttonStyle!,GUILayout.MinHeight(40)))s.AggregatePlatform.Value=j;
-            GUILayout.EndHorizontal();
-        }
+        s.AggregatePlatform.Value=PresetGrid(s.AggregatePlatform.Value,GdMusicApi.Names);
         GUILayout.Label("部分平台可能未开放，空结果或失败时可换源。",hint);
-        aggregateQuery=GUILayout.TextField(aggregateQuery,200,GUILayout.MinHeight(42));
+        aggregateQuery=GUILayout.TextField(aggregateQuery,200,GUILayout.Height(44));
         bool old=GUI.enabled;GUI.enabled=old&&!player.Busy;
         if(Button("搜索歌曲 / 歌手")){aggregatePage=1;searchedQuery=aggregateQuery;searchedPlatform=s.AggregatePlatform.Value;player.Search(GdMusicApi.Keys[searchedPlatform],searchedQuery,aggregatePage);}
         GUILayout.BeginHorizontal();
@@ -233,7 +236,10 @@ public static class MusicPanel
         GUILayout.EndHorizontal();
         GUI.enabled=old&&!player.Busy;
         foreach(var track in player.Results)
-            if(GUILayout.Button(track.Title+"\n"+track.Artist+" · "+track.Album,buttonStyle!,GUILayout.MinHeight(54)))player.Play(track,s.AggregateBitrate.Value);
+        {
+            if(GUILayout.Button(track.Title+"\n"+track.Artist+"  ·  "+track.Album,buttonStyle!,GUILayout.Height(64)))player.Play(track,s.AggregateBitrate.Value);
+            GUILayout.Space(8);
+        }
         GUI.enabled=old;
     }
     internal static void DrawLyricsSettings()
@@ -252,16 +258,16 @@ public static class MusicPanel
         GUILayout.Space(10);
         if(fontFolderEdit.Length==0)fontFolderEdit=s.FontFolder.Value;
         GUILayout.Label("字体素材目录");
-        fontFolderEdit=GUILayout.TextField(fontFolderEdit,GUILayout.MinWidth(0),GUILayout.MinHeight(44));
+        fontFolderEdit=GUILayout.TextField(fontFolderEdit,GUILayout.MinWidth(0),GUILayout.Height(44));
         if(Button("刷新字体列表")){s.FontFolder.Value=fontFolderEdit;plugin.Fonts.Refresh(fontFolderEdit);fontPage=0;}
         GUILayout.Label(plugin.Fonts.Status,hint);
-        GUILayout.Label("搜索字体");string query=GUILayout.TextField(fontSearch,GUILayout.MinWidth(0),GUILayout.MinHeight(44));
+        GUILayout.Label("搜索字体");string query=GUILayout.TextField(fontSearch,GUILayout.MinWidth(0),GUILayout.Height(44));
         if(query!=fontSearch){fontSearch=query;fontPage=0;}
         var choices=plugin.Fonts.Choices.Where(f=>f.Path.Length>0&&(fontSearch.Length==0||f.Label.IndexOf(fontSearch,StringComparison.OrdinalIgnoreCase)>=0)).ToArray();
         int pages=Math.Max(1,(choices.Length+9)/10);fontPage=Math.Clamp(fontPage,0,pages-1);
         foreach(var choice in choices.Skip(fontPage*10).Take(10))
         {
-            if(GUILayout.Button(new GUIContent(choice.Label,choice.Path),s.FontPath.Value==choice.Path?selectedStyle!:buttonStyle!,GUILayout.MinWidth(0),GUILayout.MinHeight(44)))
+            if(GUILayout.Button(new GUIContent(choice.Label,choice.Path),s.FontPath.Value==choice.Path?selectedStyle!:buttonStyle!,GUILayout.MinWidth(0),GUILayout.Height(rowHeight-4)))
             {s.FontPath.Value=choice.Path;SetFeedback("已选择字体："+choice.Label);}
             GUILayout.Space(6);
         }
@@ -278,8 +284,9 @@ public static class MusicPanel
         var s=plugin.Settings;
         SectionTitle("歌词显示");
         s.Mode.Value=NamedSelection("播放方式",s.Mode.Value,Modes);
-        if(s.Mode.Value==2)GUILayout.Label("整句保持同一位置，按演唱顺序逐字显现；下一句才换位置。",hint);
-        if(s.Style.Value!="dango")GUILayout.Label("当前为Folia样式，自带逐词排版；上方三种播放方式用于Dango样式。",hint);
+        // Reserved single-line slots: switching modes must not push the rows below around.
+        GUILayout.Label(s.Mode.Value==2?"整句保持同一位置，按演唱顺序逐字显现；下一句才换位置。":"",noticeStyle,GUILayout.Height(20));
+        GUILayout.Label(s.Style.Value!="dango"?"当前为Folia样式，自带逐词排版；上方三种播放方式用于Dango样式。":"",noticeStyle,GUILayout.Height(20));
         GUILayout.Space(16);
         if(Button("恢复 Sorihiko 原项目默认")){s.ApplyOriginalDefaults();plugin.Notice="已恢复原项目歌词默认参数；播放器连接设置保留。";}
         GUILayout.Label("默认在左右两侧生成，固定世界位置；缩放1、距离10、散布30°。",hint);
@@ -362,14 +369,14 @@ public static class MusicPanel
     }
     static bool Button(string label,float width=0)
     {
-        bool clicked=width>0?GUILayout.Button(label,buttonStyle!,GUILayout.Width(width),GUILayout.MinHeight(48)):GUILayout.Button(label,buttonStyle!,GUILayout.MinHeight(48));
+        bool clicked=width>0?GUILayout.Button(label,buttonStyle!,GUILayout.Width(width),GUILayout.Height(rowHeight)):GUILayout.Button(label,buttonStyle!,GUILayout.Height(rowHeight));
         if(clicked)SetFeedback("已执行："+label);
         return clicked;
     }
     static int Selection(int selected,string[] labels)
     {
-        Rect area=GUILayoutUtility.GetRect(GUIContent.none,GUIStyle.none,GUILayout.MinWidth(0),GUILayout.ExpandWidth(true),GUILayout.Height(48));
-        float gap=10,width=Mathf.Max(0,(area.width-gap*(labels.Length-1))/labels.Length);
+        Rect area=GUILayoutUtility.GetRect(GUIContent.none,GUIStyle.none,GUILayout.MinWidth(0),GUILayout.ExpandWidth(true),GUILayout.Height(rowHeight));
+        float gap=GridColumnGap*.6f,width=Mathf.Max(0,(area.width-gap*(labels.Length-1))/labels.Length);
         for(int i=0;i<labels.Length;i++)
         {
             if(GUI.Button(new Rect(area.x+i*(width+gap),area.y,width,area.height),labels[i],selected==i?selectedStyle!:buttonStyle!))
@@ -379,18 +386,19 @@ public static class MusicPanel
     }
     static int NamedSelection(string label,int selected,string[] labels)
     {
-        GUILayout.BeginHorizontal();
-        GUILayout.Label(label,rowLabel,GUILayout.Width(RowLabelWidth),GUILayout.Height(48));
+        GUILayout.BeginHorizontal(GUILayout.Height(rowHeight));
+        GUILayout.Label(label,rowLabel,GUILayout.Width(RowLabelWidth),GUILayout.Height(rowHeight));
         GUILayout.Space(ControlGap);
         int result=Selection(selected,labels);
         GUILayout.EndHorizontal();
+        GUILayout.Space(6);
         return result;
     }
     static void Toggle(string label,ConfigEntry<bool> entry)
     {
-        GUILayout.BeginHorizontal(GUILayout.MinHeight(48));
-        GUILayout.Label(label,rowLabel,GUILayout.MinWidth(0),GUILayout.ExpandWidth(true));
-        bool value=GUILayout.Toggle(entry.Value,entry.Value?"已开启":"已关闭",buttonStyle!,GUILayout.Width(ValueWidth),GUILayout.Height(48));
+        GUILayout.BeginHorizontal(GUILayout.Height(rowHeight));
+        GUILayout.Label(label,rowLabel,GUILayout.MinWidth(0),GUILayout.ExpandWidth(true),GUILayout.Height(rowHeight));
+        bool value=GUILayout.Toggle(entry.Value,entry.Value?"已开启":"已关闭",buttonStyle!,GUILayout.Width(ValueWidth),GUILayout.Height(rowHeight));
         GUILayout.EndHorizontal();if(value!=entry.Value){entry.Value=value;SetFeedback(label+(value?"：已开启":"：已关闭"));}
         GUILayout.Space(8);
     }
@@ -452,17 +460,17 @@ public static class MusicPanel
     static int PresetGrid(int selected,string[] labels,bool momentary=false,Action<int>? onPick=null)
     {
         const int columns=2;
-        const float columnGap=12,rowGap=8,rowHeight=48;
+        float rowGap=GridRowGap,cellHeight=rowHeight;
         int rows=(labels.Length+columns-1)/columns;
         // Reserve the whole grid once: every row shares the same column boundaries,
         // including the final unpaired item, in both standalone and embedded panels.
         Rect area=GUILayoutUtility.GetRect(GUIContent.none,GUIStyle.none,
-            GUILayout.MinWidth(0),GUILayout.ExpandWidth(true),GUILayout.Height(rows*rowHeight+Math.Max(0,rows-1)*rowGap));
-        float width=Mathf.Max(0,(area.width-columnGap)/columns);
+            GUILayout.MinWidth(0),GUILayout.ExpandWidth(true),GUILayout.Height(rows*cellHeight+Math.Max(0,rows-1)*rowGap));
+        float width=Mathf.Max(0,(area.width-GridColumnGap)/columns);
         int result=selected;
         for(int i=0;i<labels.Length;i++)
         {
-            var cell=new Rect(area.x+(i%columns)*(width+columnGap),area.y+(i/columns)*(rowHeight+rowGap),width,rowHeight);
+            var cell=new Rect(area.x+(i%columns)*(width+GridColumnGap),area.y+(i/columns)*(cellHeight+rowGap),width,cellHeight);
             if(GUI.Button(cell,labels[i],!momentary&&selected==i?selectedPresetStyle!:presetStyle!))
             {result=i;SetFeedback("已选择："+labels[i]);onPick?.Invoke(i);}
         }

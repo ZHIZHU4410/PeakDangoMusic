@@ -25,6 +25,7 @@ internal sealed class MusicWindow : IDisposable
     bool closeRequested;
     int lastDrawFrame=-1;
     bool wasFocused=true;
+    float diagnosedWidth=-1,diagnosedHeight=-1;
     internal bool BlocksPlayerInput=>Open || Time.frameCount<=suppressInputUntil;
     internal bool CloseRequested=>closeRequested;
     internal void RequestClose()=>closeRequested=true;
@@ -175,31 +176,42 @@ internal sealed class MusicWindow : IDisposable
             rect.width=Mathf.Min(1440,Mathf.Max(280,width-48));rect.height=Mathf.Min(940,Mathf.Max(240,height-48));
             if(!centered){rect.x=(width-rect.width)*.5f;rect.y=(height-rect.height)*.5f;centered=true;}
             rect.x=Mathf.Clamp(rect.x,0,Mathf.Max(0,width-rect.width));rect.y=Mathf.Clamp(rect.y,0,Mathf.Max(0,height-rect.height));
-            rect=GUILayout.Window(0x50444d,rect,Content,"");
+            // GUI.Window keeps our exact size. GUILayout.Window resized itself to its
+            // content, which is what made the panel stretch the instant a label changed.
+            GUI.Window(0x50444d,rect,Content,"");
+            // Diagnostic: proves whether the frame itself moves on click/scroll.
+            if(rect.width!=diagnosedWidth||rect.height!=diagnosedHeight)
+            {
+                diagnosedWidth=rect.width;diagnosedHeight=rect.height;
+                Plugin.Instance?.Log("音乐窗口外框 "+rect.width.ToString("F0")+"x"+rect.height.ToString("F0")+" @ "+rect.x.ToString("F0")+","+rect.y.ToString("F0"));
+            }
         }
         finally{GUI.skin=original;GUI.matrix=previousMatrix;GUI.color=previousColor;GUI.contentColor=previousContentColor;GUI.backgroundColor=previousBackgroundColor;GUI.depth=previousDepth;}
     }
     void Content(int id)
     {
+        float innerWidth=Mathf.Max(200,rect.width-48);
+        GUILayout.BeginArea(new Rect(24,20,innerWidth,Mathf.Max(160,rect.height-40)));
         GUILayout.BeginHorizontal();GUILayout.BeginVertical();
         GUILayout.Label("Muonium · PEAK 音乐播放器",heading);
-        GUILayout.Label("原生曲库 / 多平台聚合  ·  设置自动保存  ·  v"+Plugin.Version+(MusicPanel.Feedback.Length>0?"  ·  "+MusicPanel.Feedback:""),subtitle);
+        GUILayout.Label("原生曲库 / 多平台聚合  ·  设置自动保存  ·  v"+Plugin.Version+(MusicPanel.Feedback.Length>0?"  ·  "+MusicPanel.Feedback:""),subtitle,GUILayout.Height(24));
         GUILayout.EndVertical();
+        // The support button sits next to close now: the old footer row was covered by
+        // PEAK's own bottom UI, so clicks never reached it.
+        GUILayout.FlexibleSpace();
+        if(GUILayout.Button(new GUIContent("支持我","在浏览器中打开布洛芬的爱发电主页"),GUILayout.Width(128),GUILayout.Height(48)))
+            Application.OpenURL("https://afdian.com/a/blf4410");
+        GUILayout.Space(10);
         bool close=GUILayout.Button("关闭  ·  Esc",GUILayout.Width(220),GUILayout.Height(48));
         // Record the request before drawing the panel. A layout exception in the
         // panel can then no longer strand the modal in the open(input-blocking) state.
         if(close)RequestClose();
         GUILayout.EndHorizontal();GUILayout.Space(18);
-        try{Plugin.Instance!.Hub.Draw(rect.width-48,rect.height);}
+        try{Plugin.Instance!.Hub.Draw(innerWidth,rect.height-40);}
         catch(Exception ex){DiagnosticLog.Report("设置窗口","绘制设置面板",ex);}
-        // Keep the footer outside the scrolling settings so it stays at bottom left.
-        GUILayout.Space(10);
-        GUILayout.BeginHorizontal();
-        if(GUILayout.Button(new GUIContent("支持我","在浏览器中打开布洛芬的爱发电主页"),GUILayout.Width(128),GUILayout.Height(40)))
-            Application.OpenURL("https://afdian.com/a/blf4410");
-        GUILayout.FlexibleSpace();
-        GUILayout.EndHorizontal();
-        GUI.DragWindow(new Rect(0,0,Mathf.Max(0,rect.width-270),90));
+        GUILayout.EndArea();
+        // Header drag strip stops before the two buttons so they stay clickable.
+        GUI.DragWindow(new Rect(0,0,Mathf.Max(0,rect.width-420),90));
     }
     Texture2D Background(Color color)
     {
