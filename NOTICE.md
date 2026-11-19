@@ -1,3 +1,11 @@
+# 2.3.2 additional platform components
+
+Additional original Muonium Bilibili, YouTube, LX, Kuwo and Migu service files are adapted in source/MuoniumBridge/platforms. Changes include PEAK DTO conversion, memory-only credential snapshots, original Rhino package names, host-owned dependency installation and audio decoding. See docs/MUONIUM.md for the pinned upstream and changes.
+
+Rhino 1.7.15 is distributed unchanged under MPL-2.0 and its included third-party notices. Its exact corresponding source is available at https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.7.15/rhino-1.7.15-sources.jar . Closure Compiler v20240317 is distributed unchanged from Maven under Apache-2.0; source: https://github.com/google/closure-compiler/tree/v20240317 . Their original JAR metadata, extracted LICENSE/NOTICE files, and exact artifact hashes accompany the runtime.
+
+FFmpeg is an optional user-installed dependency and is not redistributed in these packages. User LX scripts and downloaded audio caches are excluded.
+
 # 2.3.0 Muonium primary-player components
 
 MuoniumPlayer native music/account services: https://github.com/zihe114514/MuoniumPlayer-multiversion , pinned9b4cc7e7bd143315da716075a6d024a0d4c0c81b, Apache-2.0. The23 retained source files and PEAK adapter are distributed in the corresponding source package. Modified files carry notices. The adapted Unity interface is implemented by PeakDangoMusic; Minecraft/Skija interface code is not embedded.

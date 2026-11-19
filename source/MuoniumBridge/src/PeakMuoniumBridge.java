@@ -26,7 +26,7 @@ public final class PeakMuoniumBridge {
             while((line=readBounded(input))!=null){
                 JsonObject response=new JsonObject();
                 try{var request=JsonParser.parseString(line).getAsJsonObject();response.add("id",request.get("id"));response.add("data",bridge.handle(request));response.addProperty("ok",true);}
-                catch(Exception e){response.addProperty("ok",false);response.addProperty("error","平台请求失败（"+e.getClass().getSimpleName()+"），请重试或检查登录/网络");}
+                catch(Exception e){response.addProperty("ok",false);response.addProperty("error","平台请求失败（"+e.getClass().getSimpleName()+"），请重试或检查登录/网络");if(e instanceof IllegalStateException && Set.of("audio unavailable","FFmpeg required","host audio cache required","audio decode failed","audio decode timeout").contains(e.getMessage()))response.addProperty("errorCode",e.getMessage());}
                 output.println(bridge.gson.toJson(response));
             }
         }
@@ -40,12 +40,16 @@ public final class PeakMuoniumBridge {
     String text(JsonObject q,String k){return q.has(k)&&!q.get(k).isJsonNull()?q.get(k).getAsString():"";}
     JsonObject handle(JsonObject q)throws Exception{
         String op=text(q,"op"),platform=text(q,"source");MusicSource source=source(platform);
+        if(platform.equals("lx-native"))return LxAdapter.handle(q,this);
+        if(platform.equals("youtube-native")){var result=YouTubeAdapter.handle(q);result.add("credentials",credentials());return result;}
+        if(platform.equals("bilibili-native")){var result=BilibiliAdapter.handle(q);result.add("credentials",credentials());return result;}
+        if(platform.equals("kugou")){var result=KugouAdapter.handle(q);result.add("credentials",credentials());return result;}
         JsonObject out=new JsonObject();
         switch(op){
             case "hello":out.addProperty("protocol",1);break;
             case "restore":{
                 var c=q.getAsJsonObject("credentials");
-                if(c!=null){api.getNetease().setCookie(text(c,"netease"));api.getQq().setMusicid(text(c,"qqId"));api.getQq().setMusicKey(text(c,"qqKey"));}
+                if(c!=null){if(c.has("youtube")&&c.get("youtube").isJsonObject())com.muoniumplayer.core.ncm.music.YouTubeSessionStore.restoreState(c.getAsJsonObject("youtube"));if(c.has("bilibili")&&c.get("bilibili").isJsonObject())com.muoniumplayer.core.ncm.music.BilibiliSessionStore.state=c.getAsJsonObject("bilibili");if(c.has("kugou")&&c.get("kugou").isJsonObject())com.muoniumplayer.core.ncm.kugou.PeakDeviceStore.state=c.getAsJsonObject("kugou");api.getNetease().setCookie(text(c,"netease"));api.getQq().setMusicid(text(c,"qqId"));api.getQq().setMusicKey(text(c,"qqKey"));}
                 break;
             }
             case "qr":{
@@ -68,8 +72,8 @@ public final class PeakMuoniumBridge {
                 break;
             }
             case "account":{
-                if(source==MusicSource.QQ){if(api.getQq().getLoggedIn()){var user=api.getQq().getUserInfo();out.addProperty("name",user.getNickname());out.addProperty("loggedIn",true);}else out.addProperty("loggedIn",false);}
-                else{var data=api.getNetease().callJson("/weapi/w/nuser/account/get",Map.of());var value=data.get("profile");var profile=value!=null&&value.isJsonObject()?value.getAsJsonObject():null;out.addProperty("loggedIn",profile!=null);if(profile!=null)out.addProperty("name",text(profile,"nickname"));}
+                if(source==MusicSource.QQ){if(api.getQq().getLoggedIn()){var user=api.getQq().getUserInfo();out.addProperty("name",user.getNickname());out.addProperty("avatar",user.getAvatarUrl());out.addProperty("loggedIn",true);}else out.addProperty("loggedIn",false);}
+                else{var data=api.getNetease().callJson("/weapi/w/nuser/account/get",Map.of());var value=data.get("profile");var profile=value!=null&&value.isJsonObject()?value.getAsJsonObject():null;out.addProperty("loggedIn",profile!=null);if(profile!=null){out.addProperty("name",text(profile,"nickname"));out.addProperty("avatar",text(profile,"avatarUrl"));}}
                 break;
             }
             case "logout":{
@@ -111,17 +115,25 @@ public final class PeakMuoniumBridge {
                 SongUrl url=api.getSongUrl(track,AudioQuality.HIGH);
                 if(!url.getAvailable())throw new IllegalStateException("audio unavailable");
                 out.addProperty("url",url.getUrl());out.addProperty("format",url.getFormat());out.addProperty("trial",url.isTrial());out.addProperty("trialStartMs",url.getTrialStartMs());
-                try{Lyric lyric=api.getLyric(track);out.add("lines",gson.toJsonTree(lyric.getLines()));}catch(Exception ignored){out.add("lines",new JsonArray());}
+                try{Lyric lyric=api.getLyric(track);out.add("lines",gson.toJsonTree(lyric.getLines()));
+                    // Preserve raw syllable data for the same parser used in PEAK 2.1.2.
+                    out.addProperty("lrc",lyric.getLrc());out.addProperty("yrc",lyric.getYrc());out.addProperty("tlyric",lyric.getTranslated());
+                }catch(Exception ignored){out.add("lines",new JsonArray());}
                 break;
             }
             default:throw new IllegalArgumentException("unsupported operation");
         }
         return out;
     }
-    JsonObject credentials(){var c=new JsonObject();c.addProperty("netease",api.getNetease().getCookie());c.addProperty("qqId",api.getQq().getMusicid());c.addProperty("qqKey",api.getQq().getMusicKey());return c;}
+    static String qrImage(String content)throws Exception{
+        var matrix=new QRCodeWriter().encode(content,BarcodeFormat.QR_CODE,280,280,Map.of(EncodeHintType.MARGIN,4));var image=new BufferedImage(280,280,BufferedImage.TYPE_INT_RGB);
+        for(int y=0;y<280;y++)for(int x=0;x<280;x++)image.setRGB(x,y,matrix.get(x,y)?0:0xffffff);
+        var bytes=new ByteArrayOutputStream();ImageIO.write(image,"png",bytes);return Base64.getEncoder().encodeToString(bytes.toByteArray());
+    }
+    JsonObject credentials(){var c=new JsonObject();c.add("youtube",com.muoniumplayer.core.ncm.music.YouTubeSessionStore.exportState());c.addProperty("netease",api.getNetease().getCookie());c.addProperty("qqId",api.getQq().getMusicid());c.addProperty("qqKey",api.getQq().getMusicKey());if(com.muoniumplayer.core.ncm.kugou.PeakDeviceStore.state!=null)c.add("kugou",com.muoniumplayer.core.ncm.kugou.PeakDeviceStore.state);c.add("bilibili",com.muoniumplayer.core.ncm.music.BilibiliSessionStore.state);return c;}
     JsonArray list(List<Track> rows){
         var out=new JsonArray();
-        for(Track t:rows){String platform=t.getSource()==MusicSource.QQ?"qq":"ncm";String stableId=t.getSource()==MusicSource.QQ?t.getMid():t.getId();if(stableId==null||stableId.isEmpty())continue;tracks.put(platform+":"+stableId,t);var row=new JsonObject();row.addProperty("id",stableId);row.addProperty("title",t.getName());row.addProperty("artist",t.getArtists());row.addProperty("album",t.getAlbum());row.addProperty("source",platform);out.add(row);}
+        for(Track t:rows){String platform=t.getSource()==MusicSource.QQ?"qq":"ncm";String stableId=t.getSource()==MusicSource.QQ?t.getMid():t.getId();if(stableId==null||stableId.isEmpty())continue;tracks.put(platform+":"+stableId,t);var row=new JsonObject();row.addProperty("id",stableId);row.addProperty("title",t.getName());row.addProperty("artist",t.getArtists());row.addProperty("album",t.getAlbum());row.addProperty("cover",t.getCoverUrl());row.addProperty("source",platform);out.add(row);}
         while(tracks.size()>1000)tracks.remove(tracks.keySet().iterator().next());return out;
     }
 }

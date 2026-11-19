@@ -1,3 +1,11 @@
+# 2.3.2 平台适配补充
+
+上游继续固定原提交。platforms 目录新增 Bilibili、YouTube、LX、酷我和咪咕服务及运行器；针对 Unity 修改 DTO/会话存储及普通音频解码适配。Bilibili/YouTube 会话仅通过宿主 DPAPI 快照保存，Java 不写 Cookie 文件。
+
+LX 使用原版 Rhino 1.7.15 包名替代上游私有重定位名，保留 ClassShutter、解释执行指令预算及请求超时；Closure Compiler v20240317 随包安装，不在游戏内下载。使用官方 Maven 原包（未使用上游裁剪版），SHA256 固定于 dependencies.json。用户脚本仅由用户指定本地路径，不发布、不默认加载。
+
+FFmpeg 为用户自行安装的可选组件，不随包再分发。仅转码普通授权音频，不复制 DRM 设备文件。准确平台状态见 PLATFORMS.md。以下为历史实现记录，现状以该表和 CHANGELOG 为准。
+
 # 2.3.0 Muonium 主播放器适配
 
 固定上游：https://github.com/zihe114514/MuoniumPlayer-multiversion/tree/9b4cc7e7bd143315da716075a6d024a0d4c0c81b

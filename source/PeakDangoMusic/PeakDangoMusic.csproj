@@ -1,12 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.1</TargetFramework><LangVersion>latest</LangVersion><AssemblyName>PeakDangoMusic</AssemblyName><Version>2.3.0</Version>
-    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><DebugType>embedded</DebugType><NoWarn>$(NoWarn);CS0618</NoWarn>
-    <GameRoot Condition="'$(GameRoot)'==''">$(MSBuildProjectDirectory)\..\..\..</GameRoot>
+    <TargetFramework>netstandard2.1</TargetFramework><LangVersion>latest</LangVersion>
+    <AssemblyName>PeakDangoMusic</AssemblyName><Version>2.3.4</Version>
+    <RootNamespace></RootNamespace>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>embedded</DebugType>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CS0618;CS8632;CS0169;CS0414</NoWarn>
+    <GameRoot Condition="'$(GameRoot)'==''">$(MSBuildProjectDirectory)\..\..\..\..</GameRoot>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../Shared/FailureDetail.cs" Link="FailureDetail.cs" />
-    <EmbeddedResource Include="Assets/NumericGlyphs.png" LogicalName="PeakDangoMusic.NumericGlyphs.png" />
+    <EmbeddedResource Include="PeakDangoMusic.NumericGlyphs.png" LogicalName="PeakDangoMusic.NumericGlyphs.png" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\chart_hot.jpg" LogicalName="PeakDangoMusic.chart_hot.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\chart_new.jpg" LogicalName="PeakDangoMusic.chart_new.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\chart_soar.jpg" LogicalName="PeakDangoMusic.chart_soar.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\chart_origin.jpg" LogicalName="PeakDangoMusic.chart_origin.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\qq_hot.jpg" LogicalName="PeakDangoMusic.qq_hot.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\qq_new.jpg" LogicalName="PeakDangoMusic.qq_new.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\qq_soar.jpg" LogicalName="PeakDangoMusic.qq_soar.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\qq_pop.jpg" LogicalName="PeakDangoMusic.qq_pop.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\author_boluofen.jpg" LogicalName="PeakDangoMusic.author_boluofen.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\author_dv.jpg" LogicalName="PeakDangoMusic.author_dv.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\author_test.jpg" LogicalName="PeakDangoMusic.author_test.jpg" />
     <Reference Include="$(GameRoot)\BepInEx\core\BepInEx.dll" Private="false" />
     <Reference Include="$(GameRoot)\BepInEx\core\0Harmony.dll" Private="false" />
     <Reference Include="$(GameRoot)\PEAK_Data\Managed\*.dll" Private="false" Exclude="$(GameRoot)\PEAK_Data\Managed\System*.dll;$(GameRoot)\PEAK_Data\Managed\Mono*.dll;$(GameRoot)\PEAK_Data\Managed\mscorlib.dll;$(GameRoot)\PEAK_Data\Managed\netstandard.dll" />

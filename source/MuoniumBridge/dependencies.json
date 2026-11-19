@@ -14,6 +14,16 @@
       "name": "zxing-core-3.5.3.jar",
       "url": "https://repo.maven.apache.org/maven2/com/google/zxing/core/3.5.3/core-3.5.3.jar",
       "sha256": "8d8064c1636fdaef7189dd9055c7d59950a8940a12f2293956446ec3c109fd82"
+    },
+    {
+      "name": "rhino-1.7.15.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.7.15/rhino-1.7.15.jar",
+      "sha256": "2427fdcbc149ca0a25ccfbb7c71b01f39ad42708773a47816cd2342861766b63"
+    },
+    {
+      "name": "closure-compiler-v20240317.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/javascript/closure-compiler/v20240317/closure-compiler-v20240317.jar",
+      "sha256": "6b1250ac21c05bdd209dc515d9b6037b30b5555a284dd741ff0591a82848b7ce"
     }
   ]
 }

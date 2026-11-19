@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../source/Shared/FailureDetail.cs" Link="FailureDetail.cs" />
+    <Compile Include="../../source/PeakDangoMusic/DangoMusic.Diagnostics/FailureDetail.cs" Link="FailureDetail.cs" />
     <Compile Include="../../source/NetEaseBridge/Desktop/KugouApiReader.cs" Link="KugouApiReader.cs" />
     <Compile Include="../../source/NetEaseBridge/Desktop/QqPublicLyricsClient.cs" Link="QqPublicLyricsClient.cs" />
     <Compile Include="../../source/NetEaseBridge/Desktop/PlaybackBuffer.cs" Link="PlaybackBuffer.cs" />
@@ -14,11 +14,8 @@
     <Compile Include="../../source/NetEaseBridge/Core/MusicTrack.cs" Link="MusicTrack.cs" />
     <Compile Include="../../source/NetEaseBridge/Desktop/SongMatcher.cs" Link="SongMatcher.cs" />
     <Compile Include="../../source/NetEaseBridge/Desktop/PlayerIdentity.cs" Link="PlayerIdentity.cs" />
-    <Compile Include="../../source/PeakDangoMusic/LyricContrast.cs" Link="LyricContrast.cs" />
-    <Compile Include="../../source/PeakDangoMusic/ThirdParty/DangoMusic/Lyrics.cs" Link="Lyrics.cs" />
-    <Compile Include="../../source/PeakDangoMusic/ThirdParty/DangoMusic/LyricUnicode.cs" Link="LyricUnicode.cs" />
-    <Compile Include="../../source/PeakDangoMusic/ThirdParty/DangoMusic/LyricTokens.cs" Link="LyricTokens.cs" />
-    <Compile Include="../../source/PeakDangoMusic/ThirdParty/DangoMusic/LyricAnimation.cs" Link="LyricAnimation.cs" />
-    <Compile Include="../../source/PeakDangoMusic/Compatibility.cs" Link="Compatibility.cs" />
+    <Compile Include="../../source/PeakDangoMusic/PeakDangoMusic/LyricContrast.cs" Link="LyricContrast.cs" />
+    <Compile Include="../../source/PeakDangoMusic/DangoMusic.Core/*.cs" Link="Core/%(Filename)%(Extension)" />
+    <Compile Include="../../source/PeakDangoMusic/PeakDangoMusic/UnicodeScalar.cs" Link="UnicodeScalar.cs" />
   </ItemGroup>
 </Project>

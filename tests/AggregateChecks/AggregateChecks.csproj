@@ -5,8 +5,8 @@
     <GameRoot Condition="'$(GameRoot)' == ''">$(MSBuildProjectDirectory)/../../../..</GameRoot>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../source/PeakDangoMusic/GdMusicApi.cs" Link="GdMusicApi.cs" />
-    <Compile Include="../../source/PeakDangoMusic/ThirdParty/DangoMusic/Lyrics.cs" Link="Lyrics.cs" />
+    <Compile Include="../../source/PeakDangoMusic/PeakDangoMusic/GdMusicApi.cs" Link="GdMusicApi.cs" />
+    <Compile Include="../../source/PeakDangoMusic/DangoMusic.Core/Lyrics*.cs" Link="%(Filename)%(Extension)" />
     <Reference Include="Newtonsoft.Json"><HintPath>$(GameRoot)/PEAK_Data/Managed/Newtonsoft.Json.dll</HintPath></Reference>
   </ItemGroup>
 </Project>

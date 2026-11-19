@@ -163,3 +163,12 @@ Check(DangoMusic.Desktop.KugouLyricsCache.FitToDuration(DangoMusic.Desktop.Kugou
 Check(DangoMusic.Desktop.KugouLyricsCache.FitToDuration(DangoMusic.Desktop.KugouLyricsCache.ParseText("[1000,260000]<0,1000,0>测\n[3000,1000]<0,1000,0>试"),10000).Lines.Count==0,"Do not repair corrupt nonfinal rows");
 Check(DangoMusic.Desktop.KugouLyricsCache.FitToDuration(krc,10000).Lines[0]==krc.Lines[0],"Ordinary KRC rows are unchanged");
 Console.WriteLine($"KRC duration regression assertions: {checks}");
+// 2.1.2 raw YRC path: irregular pauses and literal parentheses must survive import.
+var raw212=LyricsTimeline.Parse("[00:10.00]整句备用",
+    "[10000,4000](10000,100,0)春(10100,1800,0)风(11900,100,0)雨(12000,2000,0)夜");
+Check(raw212.Lines[0].Words?.Count==4,"Raw YRC takes precedence over line-only LRC");
+var reveal212=new LyricAnimation(raw212.Lines[0],18000,singleCharacter:true);
+Check(Alpha(reveal212,1,10200)>0&&Alpha(reveal212,2,11899)==0,"Preserve long held syllable rather than spreading whole line");
+Check(Alpha(reveal212,2,11950)>0&&Alpha(reveal212,3,11950)==0,"Third character uses original YRC time");
+Check(LyricsTimeline.Parse(null,"[1000,1000](1000,1000,0)风(轻)").Lines[0].Text=="风(轻)","Raw parser preserves parentheses in displayed lyrics");
+Console.WriteLine($"Including raw 2.1.2 YRC: {checks}");
