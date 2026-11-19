@@ -574,11 +574,11 @@ internal sealed class MuoniumHub : IDisposable
 					string text = (string)result["state"];
 					message = text switch
 					{
-						"WAITING" => "等待扫码", 
-						"SCANNED" => "已扫码，请在手机上确认", 
-						"CONFIRMED" => "登录成功", 
-						"EXPIRED" => "二维码已过期，请重新生成", 
-						_ => "登录失败，请重新生成二维码", 
+						"WAITING" => "等待扫码",
+						"SCANNED" => "已扫码，请在手机上确认",
+						"CONFIRMED" => "登录成功",
+						"EXPIRED" => "二维码已过期，请重新生成",
+						_ => "登录失败，请重新生成二维码",
 					};
 					bool flag = ((text == "WAITING" || text == "SCANNED") ? true : false);
 					polling = flag;

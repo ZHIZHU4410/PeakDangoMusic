@@ -70,17 +70,17 @@ internal sealed class FoliaClient : IDisposable
 			FontScale = settings.FoliaFontScale.Value;
 			Intensity = settings.FoliaIntensity.Value switch
 			{
-				0 => "calm", 
-				2 => "chaotic", 
-				_ => "normal", 
+				0 => "calm",
+				2 => "chaotic",
+				_ => "normal",
 			};
 			Primary = (Background ? "#F7E1D7" : ("#" + ColorUtility.ToHtmlStringRGB(palette.Face)));
 			Accent = settings.GlowColor.Value switch
 			{
-				1 => "#FF82B5", 
-				2 => "#76BBFF", 
-				3 => "#F4C676", 
-				_ => "#69D7D1", 
+				1 => "#FF82B5",
+				2 => "#76BBFF",
+				3 => "#F4C676",
+				_ => "#69D7D1",
 			};
 			if (!Background && palette.IsDark)
 			{

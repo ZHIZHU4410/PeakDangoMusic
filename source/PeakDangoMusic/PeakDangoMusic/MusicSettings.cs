@@ -214,29 +214,29 @@ internal sealed class MusicSettings
 		Wiggle.Value = id != 3;
 		Frequency.Value = id switch
 		{
-			2 => 12, 
-			1 => 4, 
-			_ => 8, 
+			2 => 12,
+			1 => 4,
+			_ => 8,
 		};
 		Amount.Value = id switch
 		{
-			3 => 0f, 
-			2 => 1.1f, 
-			1 => 0.25f, 
-			_ => 0.8f, 
+			3 => 0f,
+			2 => 1.1f,
+			1 => 0.25f,
+			_ => 0.8f,
 		};
 		Entrance.Value = id switch
 		{
-			3 => 3, 
-			2 => 2, 
-			1 => 1, 
-			_ => 0, 
+			3 => 3,
+			2 => 2,
+			1 => 1,
+			_ => 0,
 		};
 		Exit.Value = id switch
 		{
-			3 => 3, 
-			2 => 2, 
-			_ => 1, 
+			3 => 3,
+			2 => 2,
+			_ => 1,
 		};
 	}
 }

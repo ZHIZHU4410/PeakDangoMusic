@@ -41,10 +41,10 @@ internal sealed class NativeMusicClient : IDisposable
 
 	private string Player => Volatile.Read(ref source) switch
 	{
-		2 => "酷狗音乐", 
-		3 => "QQ音乐", 
-		5 => "系统媒体会话", 
-		_ => "原版网易云音乐", 
+		2 => "酷狗音乐",
+		3 => "QQ音乐",
+		5 => "系统媒体会话",
+		_ => "原版网易云音乐",
 	};
 
 	internal MusicState Snapshot => state;
@@ -136,10 +136,10 @@ internal sealed class NativeMusicClient : IDisposable
 					string text3 = Volatile.Read(ref port).ToString();
 					string text4 = Volatile.Read(ref source) switch
 					{
-						2 => "kugou", 
-						3 => "qqmusic", 
-						5 => "external", 
-						_ => "netease", 
+						2 => "kugou",
+						3 => "qqmusic",
+						5 => "external",
+						_ => "netease",
 					};
 					ProcessStartInfo processStartInfo = new ProcessStartInfo(fileName, text2 + " " + text3 + " " + text4 + " \"" + lyricsFolder.Replace("\"", "").TrimEnd('\\') + "\"");
 					processStartInfo.UseShellExecute = false;

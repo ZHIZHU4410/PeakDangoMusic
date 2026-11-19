@@ -25,10 +25,10 @@ internal static class LyricMaterial
 		{
 			Color val2 = settings.GlowColor.Value switch
 			{
-				1 => new Color(1f, 0.38f, 0.62f, 1f), 
-				2 => new Color(0.32f, 0.66f, 1f, 1f), 
-				3 => new Color(1f, 0.74f, 0.3f, 1f), 
-				_ => (Color)((palette != null && palette.IsDark) ? new Color(0.55f, 0.78f, 1f, 1f) : LyricPlacement.TextColor), 
+				1 => new Color(1f, 0.38f, 0.62f, 1f),
+				2 => new Color(0.32f, 0.66f, 1f, 1f),
+				3 => new Color(1f, 0.74f, 0.3f, 1f),
+				_ => (Color)((palette != null && palette.IsDark) ? new Color(0.55f, 0.78f, 1f, 1f) : LyricPlacement.TextColor),
 			};
 			float num2 = num * settings.GlowStrength.Value * 4f;
 			material.SetColor("_GlowColor", new Color(val2.r * num2, val2.g * num2, val2.b * num2, 1f));
