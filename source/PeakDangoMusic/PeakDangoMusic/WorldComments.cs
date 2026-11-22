@@ -16,7 +16,7 @@ internal sealed class WorldComments : IDisposable
     private readonly Plugin plugin;
     private GameObject? card;
     private Text? heading;
-    private Text? body;
+    private WorldCommentBody? body;
     private Text? author;
     private Font? font;
     private float nextAt = -1f;
@@ -45,7 +45,10 @@ internal sealed class WorldComments : IDisposable
             if (now >= expiresAt)
                 card.SetActive(false);
             else
+            {
                 Face(view.position);
+                body?.RefreshEmoji();
+            }
         }
 
         if (request != null)
@@ -75,7 +78,7 @@ internal sealed class WorldComments : IDisposable
         var comment = comments[commentIndex++ % comments.Length];
         EnsureCard();
         heading!.text = "热门评论 · " + Shorten(track.Title, 25);
-        body!.text = Shorten(comment.Body, 108);
+        body!.SetComment(comment.Body, track.Source is "qq" or "tencent");
         author!.text = Shorten(comment.Nick, 20) + (comment.Likes > 0 ? $"    {comment.Likes} 赞" : "");
         card!.transform.position = anchor;
         Face(view.position);
@@ -91,7 +94,7 @@ internal sealed class WorldComments : IDisposable
             if (data[collection] is not JArray rows) continue;
             foreach (JObject row in rows.OfType<JObject>())
             {
-                string text = ((string?)row["content"] ?? "").Trim().Replace('\n', ' ').Replace('\r', ' ');
+                string text = ((string?)row["content"] ?? "").Replace('\n', ' ').Replace('\r', ' ').Trim();
                 if (text.Length == 0) continue;
                 string nick = (string?)row["user"]?["nickname"] ?? "音乐用户";
                 int.TryParse(row["likedCount"]?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int likes);
@@ -158,13 +161,13 @@ internal sealed class WorldComments : IDisposable
         image.raycastTarget = false;
 
         heading = AddText("Track", 21, 31, 12, new Color(0.66f, 0.87f, 1f));
-        body = AddText("Comment", 26, 110, 46, Color.white);
+        body = (WorldCommentBody)AddText("Comment", 26, 110, 46, Color.white, inlineImages: true);
         author = AddText("Author", 18, 27, 162, new Color(0.79f, 0.85f, 0.93f));
     }
 
-    private Text AddText(string name, int size, int height, int top, Color color)
+    private Text AddText(string name, int size, int height, int top, Color color, bool inlineImages = false)
     {
-        var element = new GameObject(name, typeof(RectTransform), typeof(Text));
+        var element = new GameObject(name, typeof(RectTransform), inlineImages ? typeof(WorldCommentBody) : typeof(Text));
         var rect = (RectTransform)element.transform;
         rect.SetParent(card!.transform, false);
         rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);

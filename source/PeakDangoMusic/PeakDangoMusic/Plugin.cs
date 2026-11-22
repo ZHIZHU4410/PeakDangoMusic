@@ -16,7 +16,7 @@ namespace PeakDangoMusic;
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-	internal const string Version = "2.4.0";
+	internal const string Version = "2.4.1";
 
 	internal MusicSettings Settings;
 

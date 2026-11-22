@@ -44,7 +44,7 @@
 
 ## 安装
 
-需要 Windows x64、PEAK Mono 和 BepInEx 5。下载 **PeakDangoMusic-2.4.0-complete.zip**，退出 PEAK，完整解压运行“一键安装.cmd”；手动安装复制 `BepInEx/plugins/PeakDangoMusic.dll` 和整个 `PeakDangoMusic` 文件夹。必须保留新的 `Muonium` 与原有 `Folia` 组件。
+需要 Windows x64、PEAK Mono 和 BepInEx 5。下载 **PeakDangoMusic-2.4.1-complete.zip**，退出 PEAK，完整解压运行“一键安装.cmd”；手动安装复制 `BepInEx/plugins/PeakDangoMusic.dll` 和整个 `PeakDangoMusic` 文件夹。必须保留新的 `Muonium` 与原有 `Folia` 组件。
 
 雷霆管理器用户将两项复制到当前Profile的 `BepInEx/plugins`，再Start modded；不要只复制DLL，不要保留重复版本。安装器会检查文件清单并备份旧组件。
 
