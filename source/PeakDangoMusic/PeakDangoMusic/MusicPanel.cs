@@ -256,10 +256,10 @@ public static class MusicPanel
 			return;
 		}
 		Styles();
-		float num = GUI.skin.verticalScrollbar.fixedWidth + (float)GUI.skin.verticalScrollbar.margin.horizontal + (float)GUI.skin.scrollView.padding.horizontal + 12f;
+		float num = (float)GUI.skin.scrollView.padding.horizontal + 20f;
 		if (availableWidth < 880f)
 		{
-			narrowScroll = GUILayout.BeginScrollView(narrowScroll, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, Array.Empty<GUILayoutOption>());
+			narrowScroll = GUILayout.BeginScrollView(narrowScroll, false, false, GUIStyle.none, GUIStyle.none, Array.Empty<GUILayoutOption>());
 			GUILayout.BeginVertical(new GUILayoutOption[1] { GUILayout.Width(Mathf.Max(180f, availableWidth - num)) });
 			DrawGroup(() =>
 			{
@@ -298,7 +298,7 @@ public static class MusicPanel
 			GUILayout.Width(num2),
 			GUILayout.ExpandHeight(true)
 		});
-		connectionScroll = GUILayout.BeginScrollView(connectionScroll, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, Array.Empty<GUILayoutOption>());
+		connectionScroll = GUILayout.BeginScrollView(connectionScroll, false, false, GUIStyle.none, GUIStyle.none, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginVertical(new GUILayoutOption[1] { GUILayout.Width(Mathf.Max(180f, num2 - num4)) });
 		DrawGroup(() =>
 		{
@@ -321,7 +321,7 @@ public static class MusicPanel
 			ResetEntrance();
 		}
 		GUILayout.Space(16f);
-		settingsScroll = GUILayout.BeginScrollView(settingsScroll, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, Array.Empty<GUILayoutOption>());
+		settingsScroll = GUILayout.BeginScrollView(settingsScroll, false, false, GUIStyle.none, GUIStyle.none, Array.Empty<GUILayoutOption>());
 		GUILayout.BeginVertical(new GUILayoutOption[1] { GUILayout.Width(Mathf.Max(180f, num3 - num4)) });
 		if (settingsTab == 0)
 		{
@@ -623,12 +623,33 @@ public static class MusicPanel
 			instance.Settings.Enabled.Value = GUILayout.Toggle(instance.Settings.Enabled.Value, "显示悬浮歌词（不影响音乐播放）", Array.Empty<GUILayoutOption>());
 			Display(instance);
 			GUILayout.Space(20f);
+			Tint(instance);
+			GUILayout.Space(20f);
 			Effects(instance);
 			GUILayout.Space(20f);
 			FoliaStyle(instance);
 			GUILayout.Space(20f);
 			Fonts(instance);
 		}
+	}
+
+	private static void Tint(Plugin plugin)
+	{
+		MusicSettings settings = plugin.Settings;
+		SectionTitle("歌词字色");
+		GUILayout.Label("调色盘选的色只作用在游戏内悬浮歌词的字上，上面的深/浅字色、昼夜自动切换照旧，选了色就盖过去。光晕颜色设成「随字色」时会跟着一起变。", hint, new GUILayoutOption[2]
+		{
+			GUILayout.MinHeight(24f),
+			GUILayout.ExpandHeight(false)
+		});
+		Rect probe = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none, new GUILayoutOption[2]
+		{
+			GUILayout.ExpandWidth(true),
+			GUILayout.Height(1f)
+		});
+		ThemePicker.DrawLyric(plugin, Mathf.Clamp(probe.width, 360f, 1000f));
+		GUILayout.Space(6f);
+		GUILayout.Label(string.IsNullOrEmpty(settings.LyricColor.Value) ? "当前没有自定义，跟着深浅字色走。" : ("当前字色 " + settings.LyricColor.Value + "，改完立刻生效。"), hint, Array.Empty<GUILayoutOption>());
 	}
 
 	private static void Fonts(Plugin plugin)
@@ -763,7 +784,11 @@ public static class MusicPanel
 		SectionTitle("文字动画");
 		Toggle("文字光晕（深浅字均生效）", settings.Glow);
 		Toggle("逐字弹出", settings.Pop);
-		settings.GlowColor.Value = NamedSelection("光晕颜色", settings.GlowColor.Value, new string[4] { "随字色", "粉色", "蓝色", "金色" });
+		GUILayout.Label("光晕没有单独配色了，直接跟字色走：自定义了字色就用那个色，没自定义就用当前的深/浅字色。", hint, new GUILayoutOption[2]
+		{
+			GUILayout.MinHeight(24f),
+			GUILayout.ExpandHeight(false)
+		});
 		Slider("光晕强度", settings.GlowStrength, 0f, 3f, "F2");
 		Slider("光晕半径", settings.GlowRadius, 0f, 1f, "F2");
 		GUILayout.Space(24f);

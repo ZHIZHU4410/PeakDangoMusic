@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework><LangVersion>latest</LangVersion>
-    <AssemblyName>PeakDangoMusic</AssemblyName><Version>2.3.4</Version>
+    <AssemblyName>PeakDangoMusic</AssemblyName><Version>2.4.0</Version>
     <RootNamespace></RootNamespace>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -23,6 +23,7 @@
     <EmbeddedResource Include="PeakDangoMusic\assets\author_boluofen.jpg" LogicalName="PeakDangoMusic.author_boluofen.jpg" />
     <EmbeddedResource Include="PeakDangoMusic\assets\author_dv.jpg" LogicalName="PeakDangoMusic.author_dv.jpg" />
     <EmbeddedResource Include="PeakDangoMusic\assets\author_test.jpg" LogicalName="PeakDangoMusic.author_test.jpg" />
+    <EmbeddedResource Include="PeakDangoMusic\assets\author_yinwaida.jpg" LogicalName="PeakDangoMusic.author_yinwaida.jpg" />
     <Reference Include="$(GameRoot)\BepInEx\core\BepInEx.dll" Private="false" />
     <Reference Include="$(GameRoot)\BepInEx\core\0Harmony.dll" Private="false" />
     <Reference Include="$(GameRoot)\PEAK_Data\Managed\*.dll" Private="false" Exclude="$(GameRoot)\PEAK_Data\Managed\System*.dll;$(GameRoot)\PEAK_Data\Managed\Mono*.dll;$(GameRoot)\PEAK_Data\Managed\mscorlib.dll;$(GameRoot)\PEAK_Data\Managed\netstandard.dll" />

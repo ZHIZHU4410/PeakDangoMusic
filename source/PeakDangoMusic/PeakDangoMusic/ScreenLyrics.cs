@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using DangoMusic.Core;
 using UnityEngine;
@@ -277,7 +277,7 @@ internal sealed class ScreenLyrics : IDisposable
 					GUIUtility.RotateAroundPivot((float)lyricGlyphFrame.Rotation * 57.29578f, val2);
 					if (settings.Glow.Value)
 					{
-						Color color2 = (Color)(palette.IsDark ? new Color(0.55f, 0.78f, 1f, 1f) : val);
+						Color color2 = palette.Glow;
 						color2.a = (float)lyricGlyphFrame.Alpha * Mathf.Clamp01(settings.GlowStrength.Value) * 0.25f;
 						GUI.color = color2;
 						GUI.Label(new Rect(num4 - 2f, num5, glyph.Width + 12f, num3), glyph.Text, style);

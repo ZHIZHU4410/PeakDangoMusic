@@ -2306,6 +2306,14 @@ public final class KuGouMusicApi {
      * <p>删曲必须有 {@code fileid}，而枚举曲目的那个端点<b>不返回</b>它。
      * 所以删除链路要走这条 {@code get_list_all_file_v3}，它是 {@code info} 数组而不是 {@code songs}。</p>
      */
+    public static List<Track> userPlaylistTracks(String listId,int limit){
+        List<Track> result=new ArrayList<>();java.util.Set<String> seen=new java.util.HashSet<>();
+        for(int page=1;page<=20&&result.size()<limit;page++){
+            JsonArray files=userPlaylistFiles(listId,page,300);if(files==null)return null;
+            int added=0;for(JsonElement file:files){if(!file.isJsonObject())continue;Track track=parseLegacyTrack(file.getAsJsonObject());if(track!=null&&seen.add(track.hash)){result.add(track);added++;if(result.size()>=limit)break;}}
+            if(files.size()<300||added==0)break;
+        }return result;
+    }
     public static JsonArray userPlaylistFiles(String listId, int limit) {
         return userPlaylistFiles(listId, 1, limit);
     }

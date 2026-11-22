@@ -18,6 +18,8 @@ internal sealed class MusicWindow : IDisposable
 
 	private GUISkin? skin;
 
+	private int skinTheme = -1;
+
 	private GUIStyle? heading;
 
 	private GUIStyle? subtitle;
@@ -102,6 +104,7 @@ internal sealed class MusicWindow : IDisposable
 			openedScene = activeScene.name;
 			closeRequested = false;
 			Open = true;
+            Plugin.Instance?.Hub.WindowOpened();
 			suppressInputUntil = -1;
 			MusicPanel.ResetEntrance();
 			lastDrawFrame = Time.frameCount;
@@ -242,6 +245,7 @@ internal sealed class MusicWindow : IDisposable
 			return;
 		}
 		Open = false;
+        Plugin.Instance?.Hub.WindowClosed();
         Plugin.Instance?.Hub.CancelSeek();
         if(cursorCaptured){Cursor.lockState=previousCursorLock;Cursor.visible=previousCursorVisible;cursorCaptured=false;}
         closeRequested = false;
@@ -279,7 +283,7 @@ internal sealed class MusicWindow : IDisposable
 
 	internal void Draw()
 	{
-		if (!Open && expansion<=0f && (miniHidden || Plugin.Instance?.Hub.HasMiniTrack != true))return;
+		if (!Open && expansion<=0f && miniHidden)return;
         // A closing panel is paint-only; it must not consume game clicks.
         if(!Open && expansion>0 && Event.current.type!=EventType.Layout && Event.current.type!=EventType.Repaint)return;
         if(Open)EnsureCursor();
@@ -290,11 +294,19 @@ internal sealed class MusicWindow : IDisposable
 		Color contentColor = GUI.contentColor;
 		Color backgroundColor = GUI.backgroundColor;
 		int depth = GUI.depth;
+		if ((Object)(object)skin != (Object)null && skinTheme != UiKit.ThemeVersion)
+		{
+            Object.Destroy(skin);
+            foreach(var texture in textures)Object.Destroy(texture);
+            textures.Clear();
+			skin = null;
+		}
 		if ((Object)(object)skin == (Object)null)
 		{
-			font = Font.CreateDynamicFontFromOSFont(new string[3] { "Microsoft YaHei", "SimHei", "Arial" }, 20);
+			if(font == null)font = Font.CreateDynamicFontFromOSFont(new string[3] { "Microsoft YaHei", "SimHei", "Arial" }, 20);
 			skin = Object.Instantiate<GUISkin>(val);
 			skin.font = font;
+			skinTheme = UiKit.ThemeVersion;
 			GUIStyle[] array = new GUIStyle[6] { skin.label, skin.button, skin.toggle, skin.textField, skin.window, skin.box };
 			foreach (GUIStyle val2 in array)
 			{
@@ -306,19 +318,19 @@ internal sealed class MusicWindow : IDisposable
 					array2[j].textColor = UiKit.Text;
 				}
 			}
-			skin.window.normal.background = UiKit.Box(96, 96, new Color(0.90f, 0.93f, 0.97f, 0.82f), 22);
+			skin.window.normal.background = UiKit.Box(96, 96, new Color(UiKit.WindowTint.r, UiKit.WindowTint.g, UiKit.WindowTint.b, 0.82f), 22);
 			skin.window.onNormal.background = skin.window.normal.background;
 			skin.window.border = new RectOffset(22, 22, 22, 22);
 			skin.window.padding = new RectOffset(22, 22, 18, 18);
-			skin.box.normal.background = UiKit.Box(168, 128, new Color(1f, 1f, 1f, 0.24f), 14);
+			skin.box.normal.background = UiKit.Box(168, 128, UiKit.Glass(0.24f), 14);
 			skin.box.border = new RectOffset(14, 14, 14, 14);
 			skin.box.padding = new RectOffset(18, 18, 14, 16);
 			skin.box.margin = new RectOffset(0, 0, 0, 0);
-			skin.button.normal.background = UiKit.Box(220, 44, new Color(1f, 1f, 1f, 0.26f), 8);
-			skin.button.hover.background = UiKit.Box(220, 44, new Color(1f, 1f, 1f, 0.44f), 8);
+			skin.button.normal.background = UiKit.Box(220, 44, UiKit.Glass(0.26f), 8);
+			skin.button.hover.background = UiKit.Box(220, 44, UiKit.Glass(0.44f), 8);
 			skin.button.active.background = UiKit.Box(220, 44, new Color(0.88f, 0.93f, 1f, 0.07f), 8);
-			skin.button.onNormal.background = UiKit.Box(220, 44, new Color(1f, 1f, 1f, 0.74f), 8);
-			skin.button.onHover.background = UiKit.Box(220, 44, new Color(1f, 1f, 1f, 0.88f), 8);
+			skin.button.onNormal.background = UiKit.Box(220, 44, UiKit.GlassLift(0.74f), 8);
+			skin.button.onHover.background = UiKit.Box(220, 44, UiKit.GlassLift(0.88f), 8);
 			skin.button.onActive.background = skin.button.active.background;
 			skin.button.border = new RectOffset(0, 0, 0, 0);
 			skin.button.padding = new RectOffset(16, 16, 8, 8);
@@ -331,9 +343,9 @@ internal sealed class MusicWindow : IDisposable
 			skin.toggle.padding.top = 8;
 			skin.toggle.padding.bottom = 8;
 			skin.toggle.margin = new RectOffset(0, 0, 4, 6);
-			skin.textField.normal.background = Background(new Color(1f, 1f, 1f, 0.62f));
-			skin.textField.hover.background = Background(new Color(1f, 1f, 1f, 0.78f));
-			skin.textField.focused.background = Background(new Color(1f, 1f, 1f, 0.9f));
+			skin.textField.normal.background = Background(UiKit.GlassLift(0.62f));
+			skin.textField.hover.background = Background(UiKit.GlassLift(0.78f));
+			skin.textField.focused.background = Background(UiKit.GlassLift(0.9f));
 			skin.textField.padding = new RectOffset(12, 12, 10, 10);
 			skin.textField.margin = new RectOffset(0, 0, 4, 4);
 			skin.textField.fixedHeight = 0f;
@@ -347,9 +359,9 @@ internal sealed class MusicWindow : IDisposable
 			skin.horizontalSliderThumb.border = new RectOffset(0, 0, 0, 0);
 			skin.horizontalSliderThumb.fixedWidth = 18f;
 			skin.horizontalSliderThumb.fixedHeight = 18f;
-			skin.verticalScrollbar.fixedWidth = 10f;
-			skin.verticalScrollbar.margin = new RectOffset(8, 0, 0, 0);
-			skin.verticalScrollbar.normal.background = Background(new Color(1f, 1f, 1f, 0.22f));
+			skin.verticalScrollbar.fixedWidth = 0f;
+			skin.verticalScrollbar.margin = new RectOffset(0, 0, 0, 0);
+			skin.verticalScrollbar.normal.background = null;
 			skin.verticalScrollbarThumb.normal.background = Background(new Color(0.32f, 0.37f, 0.44f, 0.75f));
 			skin.verticalScrollbarThumb.hover.background = Background(new Color(0.2f, 0.26f, 0.33f, 0.7f));
 			skin.verticalScrollbar.border = new RectOffset(0, 0, 0, 0);
@@ -388,7 +400,10 @@ internal sealed class MusicWindow : IDisposable
 			rect.x = Mathf.Clamp(rect.x, 0f, Mathf.Max(0f, num2 - rect.width));
 			rect.y = Mathf.Clamp(rect.y, 0f, Mathf.Max(0f, num3 - rect.height));
 
-            Rect compact=new Rect(16f,Mathf.Max(8f,(num3-112f)*.5f),Mathf.Min(328f,num2-32f),112f);
+            float miniW=Plugin.Instance?.Hub.MiniWidth()??320f;
+            float miniX=Mathf.Clamp(Plugin.Instance?.Settings.MiniX.Value??50f,0f,100f)*0.01f;
+            float miniY = Mathf.Clamp(Plugin.Instance?.Settings.MiniY.Value ?? 14f, 0f, Mathf.Max(0f, num3 - 78f));
+            Rect compact=new Rect(Mathf.Clamp((num2-Mathf.Min(miniW,num2-24f))*miniX,0f,Mathf.Max(0f,num2-Mathf.Min(miniW,num2-24f))),miniY,Mathf.Min(miniW,num2-24f),62f);
             if(!Open && expansion<=0f){
                 if(!miniHidden)Plugin.Instance?.Hub.DrawMini(compact);
             }else{

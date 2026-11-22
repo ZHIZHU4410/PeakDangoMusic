@@ -40,6 +40,43 @@ public final class MuQQApi {
     private final LinkedHashMap<String, String> loginJar = new LinkedHashMap<>();
     private final AtomicLong nonceCounter = new AtomicLong();
 
+    private int loginType;
+    public int getLoginType(){return loginType;}
+    public void setLoginType(int value){loginType=value==1?1:0;}
+    public JsonArray getUserPlaylists(){
+        if(!getLoggedIn())throw new MusicApiException("QQ：请先登录",null);
+        var response=http.get("https://c6.y.qq.com/rsc/fcgi-bin/fcg_get_profile_homepage.fcg",
+            linkedStr("ct","20","cv","4747474","cid","205360838","userid",musicid,"reqfrom","1","reqtype","0","format","json"),linkedStr("Referer","https://y.qq.com/"),credentialCookies());
+        JsonObject root=parseJsonResponse(response.getBody());
+        if(root.has("code")&&root.get("code").getAsInt()!=0)throw new MusicApiException("QQ：个人歌单请求被拒，请刷新登录",null);
+        JsonArray result=parseUserPlaylists(root);
+        if(result.isEmpty()){
+            var fallback=http.get("https://c.y.qq.com/rsc/fcgi-bin/fcg_user_created_diss",linkedStr("uin",musicid,"hostuin",musicid,"sin","0","size","100","g_tk","5381","format","json"),linkedStr("Referer","https://y.qq.com/"),credentialCookies());
+            result=parseUserPlaylists(parseJsonResponse(fallback.getBody()));
+        }
+        return result;
+    }
+    static JsonObject parseJsonResponse(String body){int a=body.indexOf('{'),b=body.lastIndexOf('}');if(a<0||b<a)throw new MusicApiException("QQ：响应格式错误",null);return JsonParser.parseString(body.substring(a,b+1)).getAsJsonObject();}
+    public static JsonArray parseUserPlaylists(JsonObject root){
+        var result=new JsonArray();var seen=new java.util.HashSet<String>();JsonObject data=JsonExt.objOrNull(root,"data");if(data==null)data=root;
+        for(String key:List.of("mydiss","myfavdiss","disslist","list"))collectPlaylists(data.get(key),result,seen);
+        return result;
+    }
+    private static void collectPlaylists(JsonElement node,JsonArray result,java.util.Set<String> seen){
+        if(node==null||node.isJsonNull())return;
+        if(node.isJsonArray()){for(var value:node.getAsJsonArray())collectPlaylists(value,result,seen);return;}
+        if(!node.isJsonObject())return;var item=node.getAsJsonObject();String id=first(item,"dissid","tid","id"),name=first(item,"dissname","title","name");
+        if(!id.isEmpty()&&!name.isEmpty()&&seen.add(id)){var row=new JsonObject();row.addProperty("id",id);row.addProperty("name",name);row.addProperty("cover",first(item,"picurl","pic_url","cover","logo"));String count=first(item,"songnum","song_cnt","songcount");try{row.addProperty("trackCount",Integer.parseInt(count));}catch(Exception ignored){row.addProperty("trackCount",0);}result.add(row);}
+        for(String key:List.of("list","disslist"))if(item.has(key))collectPlaylists(item.get(key),result,seen);
+    }
+    private static String first(JsonObject item,String...keys){for(String key:keys)if(item.has(key)&&item.get(key).isJsonPrimitive()){String value=item.get(key).getAsString();if(!value.isEmpty())return value;}return "";}
+    public JsonObject comments(String stableId){
+        String id=stableId;
+        if(!id.matches("[0-9]+")){var detail=musicu("music.pf_song_detail_svr","get_song_detail_yqq",linked("song_mid",id,"song_type",0),false,null,null,null);var info=JsonExt.objOrNull(detail,"track_info");id=info==null?"":first(info,"id");}
+        if(!id.matches("[0-9]+"))throw new MusicApiException("QQ：无法解析歌曲评论ID",null);
+        var response=http.get("https://c.y.qq.com/base/fcgi-bin/fcg_global_comment_h5.fcg",linkedStr("g_tk","5381","cid","205360772","reqtype","2","biztype","1","topid",id,"cmd","8","pagenum","0","pagesize","30","format","json"),linkedStr("Referer","https://y.qq.com/"),credentialCookies());
+        return parseJsonResponse(response.getBody());
+    }
     private String musicid = "";
     private String musicKey = "";
 
@@ -56,6 +93,7 @@ public final class MuQQApi {
     public void clearLogin() {
         musicid = "";
         musicKey = "";
+        loginType=0;
         loginJar.clear();
     }
 
@@ -307,6 +345,10 @@ public final class MuQQApi {
     };
 
     public SongUrl getSongUrl(Track track, AudioQuality quality) {
+        return getSongUrl(track, quality, false);
+    }
+
+    public SongUrl getSongUrl(Track track, AudioQuality quality, boolean preferMp3) {
         String mid = track.getMid();
         if (mid == null || mid.isEmpty()) {
             throw new MusicApiException("QQ：缺少 songmid", null);
@@ -386,6 +428,8 @@ public final class MuQQApi {
         if (cands.isEmpty()) {
             return SongUrl.unavailable(quality, "无可用音频", -1);
         }
+        // The PEAK player uses Unity's native MP3 decoder when a track offers it.
+        if (preferMp3) cands.sort(java.util.Comparator.comparingInt(candidate -> candidate.ext.equals("mp3") ? 0 : 1));
 
         List<String> songmids = new ArrayList<>();
         List<String> filenames = new ArrayList<>();
@@ -847,6 +891,7 @@ public final class MuQQApi {
         comm.put("format", "json");
         comm.put("inCharset", "utf-8");
         comm.put("outCharset", "utf-8");
+        if(loginType==1)comm.put("tmeLoginType",1);
         comm.put("uin", musicid.isEmpty() ? "0" : musicid);
         if (getLoggedIn()) {
             comm.put("qq", musicid);
@@ -859,6 +904,7 @@ public final class MuQQApi {
     private Map<String, String> credentialCookies() {
         if (!getLoggedIn()) return new LinkedHashMap<>();
         Map<String, String> cookies = new LinkedHashMap<>();
+        if(loginType==1){cookies.put("wxuin",musicid);cookies.put("wxmusickey",musicKey);cookies.put("login_type","2");}
         cookies.put("uin", musicid);
         cookies.put("qqmusic_uin", musicid);
         cookies.put("qm_keyst", musicKey);

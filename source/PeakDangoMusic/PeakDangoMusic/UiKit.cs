@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 namespace PeakDangoMusic;
@@ -7,21 +9,21 @@ internal static class UiKit
 {
 	internal static readonly Color Ink = new Color(0.043f, 0.05f, 0.062f, 1f);
 
-	internal static readonly Color Panel = new Color(1f, 1f, 1f, 0.22f);
+	internal static Color Panel = new Color(1f, 1f, 1f, 0.22f);
 
-	internal static readonly Color PanelRaised = new Color(1f, 1f, 1f, 0.42f);
+	internal static Color PanelRaised = new Color(1f, 1f, 1f, 0.42f);
 
 	internal static readonly Color Row = new Color(0.1f, 0.13f, 0.18f, 0.06f);
 
 	internal static readonly Color RowAlt = new Color(0.1f, 0.13f, 0.18f, 0.035f);
 
-	internal static readonly Color RowHover = new Color(0.2f, 0.62f, 0.68f, 0.18f);
+	internal static Color RowHover = new Color(0.2f, 0.62f, 0.68f, 0.18f);
 
-	internal static readonly Color Accent = new Color(0.29f, 0.78f, 0.82f, 1f);
+	internal static Color Accent = new Color(0.29f, 0.78f, 0.82f, 1f);
 
-	internal static readonly Color AccentDeep = new Color(0.12f, 0.3f, 0.34f, 1f);
+	internal static Color AccentDeep = new Color(0.12f, 0.3f, 0.34f, 1f);
 
-	internal static readonly Color AccentSoft = new Color(0.17f, 0.38f, 0.42f, 1f);
+	internal static Color AccentSoft = new Color(0.17f, 0.38f, 0.42f, 1f);
 
 	internal static readonly Color Text = new Color(0.09f, 0.11f, 0.15f, 1f);
 
@@ -34,6 +36,14 @@ internal static class UiKit
 	internal static readonly Color Warn = new Color(0.97f, 0.75f, 0.37f, 1f);
 
 	internal static readonly Color Divider = new Color(0.1f, 0.13f, 0.17f, 0.22f);
+
+	internal static Color GlassTint = Color.white;
+
+	internal static Color WindowTint = new Color(0.9f, 0.93f, 0.97f);
+
+	internal static int ThemeVersion;
+
+	private static string themeHex = "\u0000";
 
 	private static readonly Dictionary<string, Texture2D> boxes = new Dictionary<string, Texture2D>();
 
@@ -48,6 +58,112 @@ internal static class UiKit
 	internal static void Init()
 	{
 		initialized = true;
+	}
+
+	private static readonly Color WindowTintDefault = new Color(0.9f, 0.93f, 0.97f);
+
+	private static readonly Color PanelDefault = new Color(1f, 1f, 1f, 0.22f);
+
+	private static readonly Color PanelRaisedDefault = new Color(1f, 1f, 1f, 0.42f);
+
+	private static readonly Color RowHoverDefault = new Color(0.2f, 0.62f, 0.68f, 0.18f);
+
+	private static readonly Color AccentDefault = new Color(0.29f, 0.78f, 0.82f, 1f);
+
+	private static readonly Color AccentSoftDefault = new Color(0.17f, 0.38f, 0.42f, 1f);
+
+	private static readonly Color AccentDeepDefault = new Color(0.12f, 0.3f, 0.34f, 1f);
+
+	internal static void ApplyTheme(Color? tint)
+	{
+		if (!tint.HasValue)
+		{
+			Panel = PanelDefault;
+			PanelRaised = PanelRaisedDefault;
+			RowHover = RowHoverDefault;
+			Accent = AccentDefault;
+			AccentSoft = AccentSoftDefault;
+			AccentDeep = AccentDeepDefault;
+			GlassTint = Color.white;
+			WindowTint = WindowTintDefault;
+			ThemeVersion++;
+			return;
+		}
+		Color value = tint.Value;
+		Color.RGBToHSV(new Color(value.r, value.g, value.b, 1f), out float h, out float s, out float v);
+		Color color = Color.HSVToRGB(h, Mathf.Clamp(Mathf.Max(s, 0.3f), 0.3f, 0.9f), Mathf.Clamp(Mathf.Max(v, 0.5f), 0.5f, 0.95f));
+		Accent = new Color(color.r, color.g, color.b, 1f);
+		AccentSoft = Color.HSVToRGB(h, Mathf.Clamp(Mathf.Max(s, 0.3f) * 0.75f, 0.2f, 0.85f), Mathf.Clamp(v * 0.6f, 0.22f, 0.62f));
+		AccentDeep = Color.HSVToRGB(h, Mathf.Clamp(Mathf.Max(s, 0.3f) * 0.8f, 0.2f, 0.85f), 0.3f);
+		RowHover = new Color(color.r, color.g, color.b, 0.18f);
+		Color color2 = Color.Lerp(Color.white, color, 0.12f);
+		Panel = new Color(color2.r, color2.g, color2.b, 0.22f);
+		PanelRaised = new Color(color2.r, color2.g, color2.b, 0.42f);
+		GlassTint = Color.Lerp(Color.white, color, 0.42f);
+		WindowTint = Color.Lerp(WindowTintDefault, color, 0.55f);
+		ThemeVersion++;
+	}
+
+	internal static void ApplyThemeHex(string hex)
+	{
+		string text = hex ?? "";
+		if (string.Equals(text, themeHex, StringComparison.OrdinalIgnoreCase))
+		{
+			return;
+		}
+		themeHex = text;
+		Color color;
+		if (!string.IsNullOrEmpty(text) && TryParseHex(text, out color))
+		{
+			ApplyTheme(color);
+		}
+		else
+		{
+			ApplyTheme(null);
+		}
+	}
+
+	internal static string ToHex(Color color)
+	{
+		return "#" + Mathf.RoundToInt(color.r * 255f).ToString("X2") + Mathf.RoundToInt(color.g * 255f).ToString("X2") + Mathf.RoundToInt(color.b * 255f).ToString("X2");
+	}
+
+	internal static bool TryParseHex(string text, out Color color)
+	{
+		color = Color.white;
+		if (string.IsNullOrEmpty(text))
+		{
+			return false;
+		}
+		string text2 = text.Trim();
+		if (text2.Length == 0)
+		{
+			return false;
+		}
+		if (text2[0] == '#')
+		{
+			text2 = text2.Substring(1);
+		}
+		if (text2.Length != 6 && text2.Length != 8)
+		{
+			return false;
+		}
+		if (!int.TryParse(text2.Substring(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int result) || !int.TryParse(text2.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int result2) || !int.TryParse(text2.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int result3))
+		{
+			return false;
+		}
+		color = new Color((float)result / 255f, (float)result2 / 255f, (float)result3 / 255f, 1f);
+		return true;
+	}
+
+	internal static Color ParseHexSafe(string text)
+	{
+		Color color;
+		if (TryParseHex(text, out color))
+		{
+			return color;
+		}
+		return Color.white;
 	}
 
 	private static string Key(Color c)
@@ -213,8 +329,20 @@ internal static class UiKit
 	internal static void Chip(Rect rect, float alpha, int radius)
 	{
 		Round(new Rect(rect.x - 1.5f, rect.y + 2.5f, rect.width + 3f, rect.height + 3f), new Color(0.06f, 0.09f, 0.13f, 0.10f), radius + 3);
-		Round(new Rect(rect.x - 1f, rect.y - 1f, rect.width + 2f, rect.height + 2f), new Color(1f, 1f, 1f, Mathf.Clamp01(alpha + 0.16f)), radius + 1);
-		Round(rect, new Color(1f, 1f, 1f, alpha), radius);
+		Color color = Color.Lerp(GlassTint, Color.white, 0.3f);
+		Round(new Rect(rect.x - 1f, rect.y - 1f, rect.width + 2f, rect.height + 2f), new Color(color.r, color.g, color.b, Mathf.Clamp01(alpha + 0.16f)), radius + 1);
+		Round(rect, Glass(alpha), radius);
+	}
+
+	internal static Color Glass(float alpha)
+	{
+		return new Color(GlassTint.r, GlassTint.g, GlassTint.b, alpha);
+	}
+
+	internal static Color GlassLift(float alpha)
+	{
+		Color color = Color.Lerp(GlassTint, Color.white, 0.55f);
+		return new Color(color.r, color.g, color.b, alpha);
 	}
 
 	internal static void Circle(Rect rect, Color color)

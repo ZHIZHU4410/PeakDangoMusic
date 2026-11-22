@@ -75,13 +75,8 @@ internal sealed class FoliaClient : IDisposable
 				_ => "normal",
 			};
 			Primary = (Background ? "#F7E1D7" : ("#" + ColorUtility.ToHtmlStringRGB(palette.Face)));
-			Accent = settings.GlowColor.Value switch
-			{
-				1 => "#FF82B5",
-				2 => "#76BBFF",
-				3 => "#F4C676",
-				_ => "#69D7D1",
-			};
+			Color accentColor = new Color(palette.Face.r * 0.72f, palette.Face.g * 0.72f, palette.Face.b * 0.72f, 1f);
+			Accent = "#" + ColorUtility.ToHtmlStringRGB(accentColor);
 			if (!Background && palette.IsDark)
 			{
 				Accent = "#234D59";

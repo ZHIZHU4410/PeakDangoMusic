@@ -1,5 +1,6 @@
 ﻿using System;
 using BepInEx.Configuration;
+using UnityEngine.InputSystem;
 
 namespace PeakDangoMusic;
 
@@ -53,8 +54,6 @@ internal sealed class MusicSettings
 
 	internal readonly ConfigEntry<int> NetEasePort;
 
-	internal readonly ConfigEntry<int> GlowColor;
-
 	internal readonly ConfigEntry<float> FontSize;
 
 	internal readonly ConfigEntry<float> Distance;
@@ -95,6 +94,10 @@ internal sealed class MusicSettings
 
 	internal readonly ConfigEntry<int> AggregateBitrate;
 
+    internal readonly ConfigEntry<int> CacheMinutes;
+
+    internal readonly ConfigEntry<int> PrefetchSongs;
+
 	internal readonly ConfigEntry<float> FoliaSize;
 
 	internal readonly ConfigEntry<float> FoliaOpacity;
@@ -107,16 +110,37 @@ internal sealed class MusicSettings
 
 	internal readonly ConfigEntry<bool> FoliaSoftware;
 
+	internal readonly ConfigEntry<string> ThemeColor;
+
+	internal readonly ConfigEntry<string> LyricColor;
+
+	internal readonly ConfigEntry<float> MiniX;
+
+	internal readonly ConfigEntry<float> MiniY;
+
+	internal readonly ConfigEntry<Key> PerspectiveKey;
+
+	internal readonly ConfigEntry<bool> AmbienceMix;
+
+	internal readonly ConfigEntry<bool> AmbienceLowPass;
+
+	internal readonly ConfigEntry<float> AmbienceFloor;
+
 	internal float WorldFontSize => 2.8f * FontSize.Value * (Distance.Value / 10f);
 
 	internal int EffectiveSource => Math.Clamp(Source.Value, 0, 5);
 
 	internal MusicSettings(ConfigFile config)
 	{
+		PerspectiveKey = config.Bind("按键", "切换视角", Key.None, "切换角色视角的按键。None 为未设置，可在播放器设置中修改。");
 		PlayerEnabled = config.Bind<bool>("播放器", "启用游戏内音乐", true, "独立于悬浮歌词开关；关闭时停止本机音乐。");
 		Enabled = config.Bind<bool>("连接", "启用漂浮歌词", true, "独立控制歌词显示；关闭歌词不会停止游戏内音乐。");
 		Source = config.Bind<int>("连接", "播放器来源", 0, new ConfigDescription("0=BLF/LX本机API；1=网易云；2=酷狗音乐；3=QQ音乐；4=GD聚合音乐；5=系统媒体会话。", (AcceptableValueBase)(object)new AcceptableValueRange<int>(0, 5), Array.Empty<object>()));
 		AggregatePlatform = config.Bind<int>("聚合音乐", "平台", 0, new ConfigDescription("GD聚合平台", (AcceptableValueBase)(object)new AcceptableValueRange<int>(0, 9), Array.Empty<object>()));
+        CacheMinutes = config.Bind("缓存", "保留分钟", 10,
+            new ConfigDescription("未使用的曲库与音频缓存保留时间。", new AcceptableValueRange<int>(1, 60)));
+        PrefetchSongs = config.Bind("缓存", "预缓存后续歌曲", 3,
+            new ConfigDescription("提前加载播放队列里的后续曲目，0 关闭预缓存。", new AcceptableValueRange<int>(0, 6)));
 		AggregateBitrate = config.Bind<int>("聚合音乐", "码率", 320, new ConfigDescription("请求音质；平台可能返回较低音质", (AcceptableValueBase)(object)new AcceptableValueList<int>(new int[5] { 128, 192, 320, 740, 999 }), Array.Empty<object>()));
 		AggregateVolume = config.Bind<float>("聚合音乐", "音量", 0.5f, new ConfigDescription("仅控制游戏内聚合音乐", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0f, 1f), Array.Empty<object>()));
 		NetEasePort = config.Bind<int>("连接", "网易云本机端口", 9223, new ConfigDescription("原版网易云可选本机进度连接端口。未公开Windows播放进度时，使用包内脚本启动网易云。", (AcceptableValueBase)(object)new AcceptableValueRange<int>(1, 65535), Array.Empty<object>()));
@@ -158,7 +182,6 @@ internal sealed class MusicSettings
 		BehindPlayer = config.Bind<bool>("显示", "位于人物后景", false, "开启后使用正常场景深度，让近处人物和岩壁遮挡歌词。");
 		Offset = config.Bind<int>("显示", "时间偏移毫秒", 0, new ConfigDescription("正值提前显示，负值延后显示。", (AcceptableValueBase)(object)new AcceptableValueRange<int>(-10000, 10000), Array.Empty<object>()));
 		Glow = config.Bind<bool>("动画", "白色光晕", true, "使用文字材质可用的 SDF 外发光；不创建实时灯光。");
-		GlowColor = config.Bind<int>("动画", "光晕颜色", 0, new ConfigDescription("对应原项目Glow color：0随字色、1粉、2蓝、3金，默认0。", (AcceptableValueBase)(object)new AcceptableValueRange<int>(0, 3), Array.Empty<object>()));
 		GlowStrength = config.Bind<float>("动画", "光晕强度", 0.3f, new ConfigDescription("对应原项目Glow strength：0–3，默认0.3。", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0f, 3f), Array.Empty<object>()));
 		GlowRadius = config.Bind<float>("动画", "光晕半径", 0.5f, new ConfigDescription("对应原项目Glow radius：0–1，默认0.5。", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0f, 1f), Array.Empty<object>()));
 		Pop = config.Bind<bool>("动画", "逐字弹出", true, "优先按播放器逐字时间；只有行时间时估算显现。");
@@ -166,6 +189,13 @@ internal sealed class MusicSettings
 		Frequency = config.Bind<int>("动画", "抖动频率", 8, new ConfigDescription("对应原项目Wiggle fps：4–24，默认8。", (AcceptableValueBase)(object)new AcceptableValueRange<int>(4, 24), Array.Empty<object>()));
 		Amount = config.Bind<float>("动画", "抖动幅度", 0.8f, new ConfigDescription("对应原项目Wiggle amount：0–2，默认0.8。", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0f, 2f), Array.Empty<object>()));
 		Entrance = config.Bind<int>("动画", "入场", 3, new ConfigDescription("PEAK扩展：0淡入；1上浮；2弹入；3直接。默认3，仅保留原项目逐字显现。", (AcceptableValueBase)(object)new AcceptableValueRange<int>(0, 3), Array.Empty<object>()));
+		ThemeColor = config.Bind<string>("外观", "界面颜色", "", "设置页调色盘选出的颜色，#RRGGBB；留空为默认玻璃白。");
+		LyricColor = config.Bind<string>("外观", "歌词字色", "", "游戏内悬浮歌词的字色，#RRGGBB；留空跟随深/浅字色设置。");
+		MiniX = config.Bind<float>("外观", "小窗水平位置", 50f, new ConfigDescription("小窗（顶部胶囊）水平位置：0=最左，50=居中，100=最右。", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0f, 100f), Array.Empty<object>()));
+		MiniY = config.Bind<float>("外观", "小窗距顶部", 14f, new ConfigDescription("小窗离屏幕上边的距离（虚拟 1080 高度下的像素）。", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0f, 400f), Array.Empty<object>()));
+		AmbienceMix = config.Bind<bool>("环境音效", "融合环境音", true, "刮风、下雨、暴雪时压低游戏内音乐并做低通，环境过去自动恢复。");
+		AmbienceLowPass = config.Bind<bool>("环境音效", "环境低通", true, "环境越强音乐越闷；关闭后只压低音量。");
+		AmbienceFloor = config.Bind<float>("环境音效", "压制强度", 1f, new ConfigDescription("1.0 为默认强度；越大压得越深、滤波越狠、回声越明显。", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0.3f, 1.6f), Array.Empty<object>()));
 		Exit = config.Bind<int>("动画", "退场", 1, new ConfigDescription("0淡出；1上浮；2缩小；3直接消失。", (AcceptableValueBase)(object)new AcceptableValueRange<int>(0, 3), Array.Empty<object>()));
 	}
 
@@ -191,7 +221,6 @@ internal sealed class MusicSettings
 		BehindPlayer.Value = false;
 		Offset.Value = 0;
 		Glow.Value = true;
-		GlowColor.Value = 0;
 		GlowStrength.Value = 0.3f;
 		GlowRadius.Value = 0.5f;
 		Pop.Value = true;

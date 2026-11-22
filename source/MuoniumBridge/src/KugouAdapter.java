@@ -23,7 +23,13 @@ public final class KugouAdapter {
     break;
    }
    case "discover":out.add("playlists",playlists(KuGouMusicApi.recommendPlaylists(20)));break;
-   case "playlist":out.add("tracks",rows(KuGouMusicApi.playlistTracks(text(q,"playlistId"),200)));break;
+   case "playlist":{
+    String id=text(q,"playlistId");List<KuGouMusicApi.Track> values;
+    if(id.startsWith("cloud:"))values=KuGouMusicApi.collectionTracks(id.substring(6),5000);
+    else if(id.startsWith("user:"))values=KuGouMusicApi.userPlaylistTracks(id.substring(5),5000);
+    else values=KuGouMusicApi.playlistTracks(id.startsWith("special:")?id.substring(8):id,300);
+    if(values==null)throw new IllegalStateException("歌单请求失败，请重试");out.add("tracks",rows(values));break;
+   }
    case "library":out.add("playlists",playlists(KuGouMusicApi.userPlaylists(100)));break;
    case "account":out.addProperty("loggedIn",KuGouDevice.isLoggedIn());out.addProperty("name",KuGouDevice.nickname());out.addProperty("avatar",image(KuGouDevice.avatarUrl()));break;
    case "logout":KuGouDevice.logout();out.addProperty("loggedIn",false);break;
@@ -42,6 +48,6 @@ public final class KugouAdapter {
   }
   return out;
  }
- static JsonArray rows(List<KuGouMusicApi.Track> rows){var out=new JsonArray();for(var track:rows){tracks.put(track.hash,track);var row=new JsonObject();row.addProperty("id",track.hash);row.addProperty("title",track.name);row.addProperty("artist",track.artist);row.addProperty("album",track.album);row.addProperty("cover",image(track.coverTemplate));row.addProperty("source","kugou");out.add(row);}while(tracks.size()>1000)tracks.remove(tracks.keySet().iterator().next());return out;}
- static JsonArray playlists(List<KuGouMusicApi.Playlist> lists){var out=new JsonArray();for(var list:lists){var row=new JsonObject();row.addProperty("id",list.id);row.addProperty("name",list.name);row.addProperty("trackCount",list.trackCount);row.addProperty("cover",image(list.coverTemplate));out.add(row);}return out;}
+ static JsonArray rows(List<KuGouMusicApi.Track> rows){var out=new JsonArray();for(var track:rows){tracks.put(track.hash,track);var row=new JsonObject();row.addProperty("id",track.hash);row.addProperty("title",track.name);row.addProperty("artist",track.artist);row.addProperty("album",track.album);row.addProperty("cover",image(track.coverTemplate));row.addProperty("source","kugou");out.add(row);}while(tracks.size()>5000)tracks.remove(tracks.keySet().iterator().next());return out;}
+ static JsonArray playlists(List<KuGouMusicApi.Playlist> lists){var out=new JsonArray();for(var list:lists){var row=new JsonObject();row.addProperty("id",!list.collectionId.isEmpty()?"cloud:"+list.collectionId:!list.listId.isEmpty()?"user:"+list.listId:"special:"+list.id);row.addProperty("name",list.name);row.addProperty("trackCount",list.trackCount);row.addProperty("cover",image(list.coverTemplate));out.add(row);}return out;}
 }

@@ -139,6 +139,9 @@ internal sealed class GdMusicApi : IDisposable
 		}).ToArray();
 	}
 
+    internal static string AudioFormat(string format, Uri uri) =>
+        (string.IsNullOrWhiteSpace(format) ? Path.GetExtension(uri.AbsolutePath) : format).Trim().TrimStart('.').ToLowerInvariant();
+
 	internal async Task<Resolved> Resolve(Track track, int bitrate, CancellationToken ct)
 	{
 		string url = "";
@@ -148,7 +151,9 @@ internal sealed class GdMusicApi : IDisposable
 			JToken val = await Get(track.Source, "types=url&id=" + Uri.EscapeDataString(track.Id) + "&br=" + item, ct).ConfigureAwait(continueOnCapturedContext: false);
 			url = ((string)val[(object)"url"]) ?? "";
 			format = ((string)(val[(object)"type"] ?? val[(object)"format"])) ?? "";
-			if (!Uri.TryCreate(url, UriKind.Absolute, out Uri result) || (!(result.Scheme == "https") && !(result.Scheme == "http")))
+			if (!Uri.TryCreate(url, UriKind.Absolute, out Uri result) ||
+                (result.Scheme != "https" && result.Scheme != "http") ||
+                AudioFormat(format, result) is "flac" or "m4a" or "aac")
 			{
 				url = "";
 				continue;

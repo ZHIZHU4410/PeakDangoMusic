@@ -1,37 +1,40 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 namespace PeakDangoMusic;
 
+/// <summary>
+/// 给歌词材质刷参数：正面字色、亮度、光晕。
+/// 字色由自适应那套调色板决定，这里只管往材质里写。
+/// </summary>
 internal static class LyricMaterial
 {
 	internal static void Apply(Material material, MusicSettings settings, AdaptiveLyrics.Palette? palette = null)
 	{
-		float num = ((palette != null && palette.IsDark) ? 1f : settings.Brightness.Value);
-		bool value = settings.Glow.Value;
-		Color val = new Color(num, num, num, 1f);
+		// 深色字本身已经压得很暗，不再额外乘亮度
+		float brightness = ((palette != null && palette.IsDark) ? 1f : settings.Brightness.Value);
+		Color grey = new Color(brightness, brightness, brightness, 1f);
+
 		if (material.HasProperty("_FaceColor"))
 		{
-			material.SetColor("_FaceColor", (Color)((palette == null) ? val : new Color(palette.Face.r * num, palette.Face.g * num, palette.Face.b * num, 1f)));
+			Color face = palette != null ? palette.Face : AdaptiveLyrics.Light;
+			material.SetColor("_FaceColor", new Color(face.r * brightness, face.g * brightness, face.b * brightness, 1f));
 		}
 		if (material.HasProperty("_Color"))
 		{
-			material.SetColor("_Color", val);
+			material.SetColor("_Color", grey);
 		}
 		if (material.HasProperty("_FaceDilate"))
 		{
 			material.SetFloat("_FaceDilate", 0.08f);
 		}
+
 		if (material.HasProperty("_GlowColor"))
 		{
-			Color val2 = settings.GlowColor.Value switch
-			{
-				1 => new Color(1f, 0.38f, 0.62f, 1f),
-				2 => new Color(0.32f, 0.66f, 1f, 1f),
-				3 => new Color(1f, 0.74f, 0.3f, 1f),
-				_ => (Color)((palette != null && palette.IsDark) ? new Color(0.55f, 0.78f, 1f, 1f) : LyricPlacement.TextColor),
-			};
-			float num2 = num * settings.GlowStrength.Value * 4f;
-			material.SetColor("_GlowColor", new Color(val2.r * num2, val2.g * num2, val2.b * num2, 1f));
+			// 光晕跟字色同色，太暗时 palette.Glow 会自动往上提
+			Color glow = palette != null ? palette.Glow : AdaptiveLyrics.Light;
+			float power = brightness * settings.GlowStrength.Value * 4f;
+			material.SetColor("_GlowColor", new Color(glow.r * power, glow.g * power, glow.b * power, 1f));
+
 			if (material.HasProperty("_GlowInner"))
 			{
 				material.SetFloat("_GlowInner", 0f);
@@ -42,13 +45,14 @@ internal static class LyricMaterial
 			}
 			if (material.HasProperty("_GlowPower"))
 			{
-				material.SetFloat("_GlowPower", value ? 0.75f : 0f);
+				material.SetFloat("_GlowPower", settings.Glow.Value ? 0.75f : 0f);
 			}
 			if (material.HasProperty("_GlowOuter"))
 			{
 				material.SetFloat("_GlowOuter", 0.08f + 0.42f * settings.GlowRadius.Value);
 			}
-			if (value)
+
+			if (settings.Glow.Value)
 			{
 				material.EnableKeyword("GLOW_ON");
 			}
@@ -57,6 +61,7 @@ internal static class LyricMaterial
 				material.DisableKeyword("GLOW_ON");
 			}
 		}
+
 		if (material.HasProperty("_OutlineWidth"))
 		{
 			material.SetFloat("_OutlineWidth", 0f);

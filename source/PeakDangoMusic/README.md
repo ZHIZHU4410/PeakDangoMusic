@@ -1,4 +1,4 @@
-# PeakDangoMusic 2.3.4 插件源码
+# PeakDangoMusic 2.4.0 插件源码
 
 PEAK 游戏内 Muonium 音乐播放器的 BepInEx 插件源码，C# / netstandard2.1。
 界面和玩法看仓库根目录的 README.md，安装看 releases 里的完整安装包。
@@ -18,7 +18,8 @@ PEAK 游戏内 Muonium 音乐播放器的 BepInEx 插件源码，C# / netstandar
 - `PeakDangoMusic/` 播放器主体
   - 界面：`MuoniumHub.cs`（侧栏、首页、歌单、搜索、队列等页面）、`MusicWindow.cs`（窗口外壳）、`UiKit.cs`（玻璃质感、胶囊、图标绘制）
   - 播放：`AggregatePlayer.cs`、`PlayerLibrary.cs`、`NativeMusicClient.cs`
-  - 平台接口：`GdMusicApi.cs`、`MuoniumClient.cs`、`CommentFeed.cs`、`DailyRecs.cs`
+  - 平台接口：`GdMusicApi.cs`、`MuoniumClient.cs`、`DailyRecs.cs`
+  - 地图功能：`WorldComments.cs`（热门评论）、`PlayerPerspective.cs`（角色视角）
   - 纹理与缓存：`CoverCache.cs`、`AvatarCache.cs`、`ChartArt.cs`、`AuthorArt.cs`
 - `DangoMusic.Core/` 逐字歌词的解析与逐帧排版
 - `DangoMusic.Desktop/` LX 歌词文件解析

@@ -168,7 +168,7 @@ internal sealed class MuoniumClient : IDisposable
 			if ((bool?)val2["ok"] != true)
 			{
                 string detail = (string?)val2["errorCode"] switch {
-                    "FFmpeg required" => "缺少 FFmpeg，请在连接与诊断填写本机 ffmpeg.exe 路径",
+                    "FFmpeg required" => "缺少 FFmpeg，请在设置里填写本机 ffmpeg.exe 路径",
                     "audio unavailable" => "平台未返回可用音频，请检查账号权限或更换曲目",
                     "audio decode timeout" => "音频转码超时，请检查网络后重试",
                     "audio decode failed" => "音频下载或转码失败，请检查网络与本机 FFmpeg",

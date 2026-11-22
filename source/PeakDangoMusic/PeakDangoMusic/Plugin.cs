@@ -12,11 +12,11 @@ using UnityEngine.SceneManagement;
 
 namespace PeakDangoMusic;
 
-[BepInPlugin("local.peak.dangomusic", "PEAK DangoMusic · Muonium 音乐播放器", "2.3.4")]
+[BepInPlugin("local.peak.dangomusic", "PEAK DangoMusic · Muonium 音乐播放器", Plugin.Version)]
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-	internal const string Version = "2.3.4";
+	internal const string Version = "2.4.0";
 
 	internal MusicSettings Settings;
 
@@ -29,6 +29,10 @@ public sealed class Plugin : BaseUnityPlugin
 	internal MuoniumHub Hub;
 
 	internal WorldLyrics Renderer;
+
+    internal PlayerPerspective Perspective { get; private set; }
+
+    private WorldComments worldComments;
 
 	private ScreenLyrics screen;
 
@@ -107,11 +111,14 @@ public sealed class Plugin : BaseUnityPlugin
 		Instance = this;
 		((BaseUnityPlugin)this).Config.SaveOnConfigSet = false;
 		Settings = new MusicSettings(((BaseUnityPlugin)this).Config);
+		ThemePicker.Load(Settings.ThemeColor.Value);
 		Fonts = new FontLibrary(Settings.FontFolder.Value);
 		Aggregate = new AggregatePlayer(this);
 		Client = new MusicClient(Settings, Aggregate);
 		Hub = new MuoniumHub(this);
 		Renderer = new WorldLyrics(Settings, Logger);
+        Perspective = new PlayerPerspective();
+        worldComments = new WorldComments(this);
 		screen = new ScreenLyrics(Settings);
 		folia = new FoliaView(Settings);
 		((BaseUnityPlugin)this).Config.SettingChanged += Changed;
@@ -123,11 +130,12 @@ public sealed class Plugin : BaseUnityPlugin
 		Logger.LogInfo((object)"DangoMusic adaptive contrast: game day/night + manual override; no screen sampling.");
 	}
 
-	private void Changed(object sender, SettingChangedEventArgs args)
-	{
+	private void Changed(object sender, SettingChangedEventArgs args)	{
 		saveAt = Time.unscaledTime + 1f;
 		Renderer?.Invalidate();
 		folia?.Invalidate();
+        if (args.ChangedSetting == Settings.LxScriptPath || args.ChangedSetting == Settings.LxChannel)
+            Hub?.InvalidateAccountCaches("lx-native");
 		if ((object)args.ChangedSetting == Settings.FontPath)
 		{
 			Renderer?.RetryFonts();
@@ -136,6 +144,49 @@ public sealed class Plugin : BaseUnityPlugin
 	}
 
 	private bool queuedOpen;
+	internal bool CapturingPerspectiveKey { get; set; }
+
+	private static bool IsPerspectiveKey(Key key, int keyCount) =>
+		(int)key > 0 && (int)key <= keyCount &&
+		key is not (Key.Escape or Key.RightShift or Key.Backslash or Key.IMESelected);
+
+	internal string PerspectiveKeyName
+	{
+		get
+		{
+			Key key = Settings.PerspectiveKey.Value;
+			Keyboard? keyboard = Keyboard.current;
+			if (!IsPerspectiveKey(key, keyboard?.allKeys.Count ?? Keyboard.KeyCount)) return "未设置";
+			return keyboard?[key].displayName ?? key.ToString();
+		}
+	}
+
+	private bool UpdatePerspectiveKey(Keyboard? keyboard, bool escapePressed)
+	{
+		if (!CapturingPerspectiveKey) return false;
+		if (!window.Open || !Hub.ViewingSettings)
+		{
+			CapturingPerspectiveKey = false;
+			return false;
+		}
+		if (escapePressed)
+		{
+			CapturingPerspectiveKey = false;
+		}
+		else if (keyboard != null)
+		{
+			var keys = keyboard.allKeys;
+			foreach (KeyControl control in keys)
+			{
+				if (!IsPerspectiveKey(control.keyCode, keys.Count) || !control.wasPressedThisFrame) continue;
+				Settings.PerspectiveKey.Value = control.keyCode;
+				CapturingPerspectiveKey = false;
+				break;
+			}
+		}
+		return true;
+	}
+
     internal void QueueOpenPlayer()=>queuedOpen=true;
 	private void Update()
 	{
@@ -153,21 +204,27 @@ public sealed class Plugin : BaseUnityPlugin
 			}
 		}
 
+        bool capturing = UpdatePerspectiveKey(current, flag);
         bool hideMini = current != null && current.backslashKey.wasPressedThisFrame;
         bool togglePlayer = current != null && current.rightShiftKey.wasPressedThisFrame;
         if(current==null){try{hideMini=Input.GetKeyDown(KeyCode.Backslash);togglePlayer=Input.GetKeyDown(KeyCode.RightShift);}catch(Exception){}}
         var selected=EventSystem.current?.currentSelectedGameObject;
         bool typing=selected!=null && (selected.GetComponent<TMPro.TMP_InputField>()!=null || selected.GetComponent<UnityEngine.UI.InputField>()!=null);
-        if(!typing){
+        if(!typing && !capturing){
             if(togglePlayer){if(window.Open)window.Close();else window.Show(null);}
             if(hideMini)window.ToggleMini();
+            Key key = Settings.PerspectiveKey.Value;
+            if (!window.Open && current != null && Cursor.lockState == CursorLockMode.Locked &&
+                IsPerspectiveKey(key, current.allKeys.Count) && current[key].wasPressedThisFrame &&
+                Perspective.HasGameplayCamera(Camera.main))
+                Perspective.Mode = (Perspective.Mode + 1) % PlayerPerspective.Names.Length;
         }
 
 		if (window.CloseRequested)
 		{
 			window.Close();
 		}
-		else if (window.Open & flag)
+		else if (window.Open && flag && !capturing)
 		{
 			window.Close();
 		}
@@ -175,6 +232,7 @@ public sealed class Plugin : BaseUnityPlugin
 		window.CheckResponsive();
         window.TickMotion();
 		window.KeepModalState();
+		UiKit.ApplyThemeHex(Settings.ThemeColor.Value);
 		Client.Configure(Settings);
 		Aggregate.Tick(Settings.PlayerEnabled.Value, Settings.AggregateVolume.Value);
 		Hub.Tick();
@@ -250,12 +308,28 @@ public sealed class Plugin : BaseUnityPlugin
 	{
 		window?.KeepModalState();
 		TickLyrics();
+        var camera = Camera.main;
+        var player = Character.localCharacter;
+        var scene = SceneManager.GetActiveScene();
+        if (scene.name == "Title" || player == null || player.data.dead || player.data.fullyPassedOut ||
+            !Perspective.HasGameplayCamera(camera))
+        {
+            Perspective.ClearView();
+            worldComments.Reset();
+            return;
+        }
+        Pose view = Perspective.UpdateView(camera!, player);
+        worldComments.Tick(view, scene.handle, Aggregate.PlayingTrack);
 	}
 
 	private void OnDisable()
 	{
+		CapturingPerspectiveKey = false;
 		window?.Close();
 		folia?.Suspend();
+        Perspective?.ClearView();
+        Perspective?.RestoreCamera();
+        worldComments?.Reset();
 	}
 
 	private void OnGUI()
@@ -292,6 +366,9 @@ public sealed class Plugin : BaseUnityPlugin
 
 	private void OnDestroy()
 	{
+        worldComments?.Dispose();
+        Perspective?.Dispose();
+        CoverCache.Reset();
 		DiagnosticLog.Write = null;
 		DiagnosticLog.Write = null;
 		((BaseUnityPlugin)this).Config.SettingChanged -= Changed;

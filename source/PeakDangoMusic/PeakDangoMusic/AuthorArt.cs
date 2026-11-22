@@ -7,7 +7,7 @@ namespace PeakDangoMusic;
 
 internal static class AuthorArt
 {
-	private static readonly string[] Files = new string[3] { "author_boluofen.jpg", "author_dv.jpg", "author_test.jpg" };
+	private static readonly string[] Files = new string[4] { "author_boluofen.jpg", "author_dv.jpg", "author_test.jpg", "author_yinwaida.jpg" };
 
 	private static readonly Dictionary<string, Texture2D> Ready = new Dictionary<string, Texture2D>();
 

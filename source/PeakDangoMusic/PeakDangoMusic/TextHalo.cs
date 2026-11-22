@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -65,13 +65,7 @@ internal sealed class TextHalo : IDisposable
 			if (flag)
 			{
 				part2.Root.layer = ((Component)text).gameObject.layer;
-				Color val3 = settings.GlowColor.Value switch
-				{
-					1 => new Color(1f, 0.38f, 0.62f),
-					2 => new Color(0.32f, 0.66f, 1f),
-					3 => new Color(1f, 0.74f, 0.3f),
-					_ => (Color)(palette.IsDark ? new Color(0.55f, 0.78f, 1f) : AdaptiveLyrics.Light),
-				};
+				Color val3 = palette.Glow;
 				float num = 1f + settings.GlowStrength.Value * 2f;
 				val3 = new Color(val3.r * num, val3.g * num, val3.b * num, Mathf.Clamp01(settings.GlowStrength.Value) * 0.75f);
 				part2.Material.EnableKeyword("OUTLINE_ON");
