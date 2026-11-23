@@ -11,6 +11,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
 
 /**
@@ -223,6 +224,110 @@ public final class MuNeteaseApi {
             }
         }
         return out;
+    }
+
+    public record HeartQueue(String seed, List<Track> tracks, String message) {}
+
+    public HeartQueue getHeartQueue(String preferred, String previous) {
+        Long uid = cookie.isBlank() ? null : getLoginUid();
+        if (uid == null || uid <= 0) return new HeartQueue("", List.of(), "请先在账号中心登录网易云音乐");
+
+        JsonArray lists = JsonExt.arrOrNull(weapi("/weapi/user/playlist",
+                linkedStr("uid", uid.toString(), "limit", "50", "offset", "0")), "playlist");
+        String likedId = "";
+        if (lists != null) {
+            for (JsonElement entry : lists) {
+                if (!entry.isJsonObject()) continue;
+                JsonObject playlist = entry.getAsJsonObject();
+                if (intOr(playlist, "specialType", 0) == 5) {
+                    likedId = textOr(playlist, "id", "");
+                    break;
+                }
+            }
+        }
+        if (likedId.isEmpty()) return new HeartQueue("", List.of(), "没有找到网易云「我喜欢的音乐」歌单");
+
+        JsonObject playlist = JsonExt.objOrNull(weapi("/weapi/v6/playlist/detail",
+                linkedStr("id", likedId, "n", "100", "s", "0")), "playlist");
+        JsonArray rows = playlist == null ? null : JsonExt.arrOrNull(playlist, "trackIds");
+        if (rows == null && playlist != null) rows = JsonExt.arrOrNull(playlist, "tracks");
+        List<String> liked = new ArrayList<>();
+        if (rows != null) {
+            for (JsonElement entry : rows) {
+                if (!entry.isJsonObject()) continue;
+                String id = textOr(entry.getAsJsonObject(), "id", "");
+                if (id.matches("[0-9]{1,24}")) liked.add(id);
+            }
+        }
+        if (liked.isEmpty()) return new HeartQueue("", List.of(), "先在网易云收藏一首喜欢的音乐，再开启心动模式");
+        if (liked.size() > 1) liked.remove(previous);
+        String seed = liked.contains(preferred) ? preferred : liked.get(ThreadLocalRandom.current().nextInt(liked.size()));
+        String path = "/api/playmode/intelligence/list";
+        JsonObject input = new JsonObject();
+        input.addProperty("songId", seed);
+        input.addProperty("type", "fromPlayOne");
+        input.addProperty("playlistId", likedId);
+        input.addProperty("startMusicId", seed);
+        input.addProperty("count", 30);
+        input.addProperty("e_r", false);
+        MuHttp.Response response = http.postForm("https://interface.music.163.com/eapi/playmode/intelligence/list",
+                Map.of("params", MuWeapi.eapi(path, GSON.toJson(input))), baseHeaders(), buildCookies(cookie));
+        JsonObject result = JsonParser.parseString(response.getBody()).getAsJsonObject();
+        if (intOr(result, "code", 200) == 301)
+            return new HeartQueue("", List.of(), "网易云登录已失效，请重新登录");
+        List<Track> tracks = parseHeartTracks(result);
+        JsonArray recommendations = JsonExt.arrOrNull(result, "data");
+        if (recommendations != null && recommendations.size() > tracks.size()) {
+            Map<String, Track> byId = new LinkedHashMap<>();
+            for (Track track : tracks) byId.put(track.getId(), track);
+            List<String> order = new ArrayList<>();
+            JsonArray missing = new JsonArray();
+            for (JsonElement entry : recommendations) {
+                if (!entry.isJsonObject() || order.size() >= 50) continue;
+                JsonObject recommendation = entry.getAsJsonObject();
+                JsonObject song = JsonExt.objOrNull(recommendation, "songInfo");
+                String id = song == null ? textOr(recommendation, "id", "") : textOr(song, "id", "");
+                if (!id.matches("[0-9]{1,24}") || order.contains(id)) continue;
+                order.add(id);
+                if (!byId.containsKey(id)) {
+                    JsonObject item = new JsonObject();
+                    item.addProperty("id", id);
+                    missing.add(item);
+                }
+            }
+            if (!missing.isEmpty()) {
+                JsonArray matches = JsonExt.arrOrNull(weapi("/weapi/v3/song/detail",
+                        linkedStr("c", GSON.toJson(missing))), "songs");
+                if (matches != null) {
+                    for (JsonElement entry : matches) {
+                        if (!entry.isJsonObject()) continue;
+                        Track track = parseTrack(entry.getAsJsonObject());
+                        byId.put(track.getId(), track);
+                    }
+                }
+                tracks = new ArrayList<>();
+                for (String id : order) if (byId.containsKey(id)) tracks.add(byId.get(id));
+            }
+        }
+        return new HeartQueue(seed, tracks, tracks.isEmpty() ? "网易云暂未返回可播的心动推荐" : "");
+    }
+
+    public static List<Track> parseHeartTracks(JsonObject response) {
+        JsonArray rows = JsonExt.arrOrNull(response, "data");
+        if (rows == null) return List.of();
+        Map<String, Track> ordered = new LinkedHashMap<>();
+        for (JsonElement entry : rows) {
+            if (!entry.isJsonObject()) continue;
+            JsonObject row = entry.getAsJsonObject();
+            JsonObject song = JsonExt.objOrNull(row, "songInfo");
+            if (song == null) song = row;
+            try {
+                Track track = parseTrack(song);
+                if (!track.getId().isEmpty() && !track.getName().isEmpty())
+                    ordered.putIfAbsent(track.getId(), track);
+            } catch (RuntimeException ignored) { }
+        }
+        return new ArrayList<>(ordered.values());
     }
 
     /** 通用 weapi 调用：返回响应体（供宿主扩展端点）。 */

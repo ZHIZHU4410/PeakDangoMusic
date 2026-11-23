@@ -621,6 +621,7 @@ public static class MusicPanel
 			Styles();
 			GUILayout.Label("地图悬浮歌词", title, Array.Empty<GUILayoutOption>());
 			instance.Settings.Enabled.Value = GUILayout.Toggle(instance.Settings.Enabled.Value, "显示悬浮歌词（不影响音乐播放）", Array.Empty<GUILayoutOption>());
+			instance.Settings.LyricWeather.Value = GUILayout.Toggle(instance.Settings.LyricWeather.Value, "地图歌词天气效果", Array.Empty<GUILayoutOption>());
 			Display(instance);
 			GUILayout.Space(20f);
 			Tint(instance);

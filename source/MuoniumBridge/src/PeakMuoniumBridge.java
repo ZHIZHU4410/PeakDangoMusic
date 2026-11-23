@@ -112,6 +112,14 @@ public final class PeakMuoniumBridge {
                 if(api.getNetease().getLoginUid()==null)throw new IllegalStateException("login required");
                 out.add("tracks",list(api.getNetease().getDailyRecommendSongs()));break;
             }
+            case "heart":{
+                if(source!=MusicSource.NETEASE)throw new IllegalArgumentException("heart source");
+                var recommendation=api.getNetease().getHeartQueue(text(q,"songId"),text(q,"previousSeed"));
+                out.add("tracks",list(recommendation.tracks()));
+                out.addProperty("seed",recommendation.seed());
+                out.addProperty("message",recommendation.message());
+                break;
+            }
             case "library":{
                 if(source==MusicSource.QQ){out.add("playlists",api.getQq().getUserPlaylists());}
                 else{var uid=api.getNetease().getLoginUid();if(uid==null)throw new IllegalStateException("login required");out.add("playlists",gson.toJsonTree(api.getNetease().getUserPlaylists(uid,100,0)));}

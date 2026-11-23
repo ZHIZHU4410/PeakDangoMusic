@@ -17,6 +17,7 @@ internal sealed class FoliaView : IDisposable
 	private Texture2D? texture;
 
 	private GameObject? root;
+	private LyricWeatherGraphic? weatherGraphic;
 
 	private RawImage? image;
 
@@ -43,6 +44,7 @@ internal sealed class FoliaView : IDisposable
 	private Camera? anchorCamera;
 
 	private bool wasOverlay = true;
+	private bool wasCinematic;
 
 	private string fault = "";
 
@@ -92,7 +94,7 @@ internal sealed class FoliaView : IDisposable
 		client.Set(null);
 	}
 
-	internal bool Tick(MusicState state, Camera? camera, bool menu, long now)
+	internal bool Tick(MusicState state, Camera? camera, bool menu, long now, CinematicLyrics.WorldPlacement? shot)
 	{
 		if (fault.Length > 0 && Time.unscaledTime < retryAt)
 		{
@@ -100,7 +102,7 @@ internal sealed class FoliaView : IDisposable
 		}
 		try
 		{
-			return Paint(state, camera, menu, now);
+			return Paint(state, camera, menu, now, shot);
 		}
 		catch (Exception ex) when ((ex is UnityException || ex is ArgumentException || ex is InvalidOperationException) ? true : false)
 		{
@@ -116,10 +118,12 @@ internal sealed class FoliaView : IDisposable
 		}
 	}
 
-	private bool Paint(MusicState state, Camera? camera, bool menu, long now)
+	private bool Paint(MusicState state, Camera? camera, bool menu, long now, CinematicLyrics.WorldPlacement? shot)
 	{
+		bool leavingCinematic = wasCinematic && !shot.HasValue;
+		wasCinematic = shot.HasValue;
 		fault = "";
-		Vector2 unused = (Vector2)((!menu && settings.FoliaPlacement.Value == 0 && (Object)(object)camera != (Object)null) ? (Vector2)(camera.WorldToViewportPoint(anchor)) : new Vector2((side == 0) ? 0.25f : 0.75f, 0.61f));
+		Vector2 unused = (Vector2)((!menu && settings.FoliaPlacement.Value == 0 && (Object)(object)camera != (Object)null) ? (Vector2)(camera.WorldToViewportPoint(shot?.Position ?? anchor)) : new Vector2((side == 0) ? 0.25f : 0.75f, 0.61f));
 		palette.Update(unused);
 		client.Set(new FoliaClient.Request(state, settings, palette));
 		FoliaClient.Frame frame = client.TakeFrame();
@@ -159,12 +163,12 @@ internal sealed class FoliaView : IDisposable
 			return false;
 		}
 		int num2 = lineView.Get(state.Timeline, settings.SplitLines.Value).FindIndex(Math.Clamp(num.GetValueOrDefault() + settings.Offset.Value, 0L, Math.Max(0L, state.DurationMs)));
-		if (num2 != anchorIndex || state.Key != anchorKey)
+		if (num2 != anchorIndex || state.Key != anchorKey || leavingCinematic)
 		{
 			anchorIndex = num2;
 			anchorKey = state.Key;
-			side = Math.Max(0, num2) % 2;
-			if ((Object)(object)camera != (Object)null)
+			if (!shot.HasValue) side = Math.Max(0, num2) % 2;
+			if (!shot.HasValue && camera != null)
 			{
 				Place(camera);
 			}
@@ -179,7 +183,7 @@ internal sealed class FoliaView : IDisposable
 			}
 			return true;
 		}
-		if (wasOverlay || (Object)(object)anchorCamera != (Object)(object)camera)
+		if (!shot.HasValue && (leavingCinematic || wasOverlay || anchorCamera != camera))
 		{
 			Place(camera);
 			wasOverlay = false;
@@ -194,11 +198,11 @@ internal sealed class FoliaView : IDisposable
 			root.SetActive(false);
 			return true;
 		}
-		if (settings.Follow.Value)
+		if (!shot.HasValue && settings.Follow.Value)
 		{
 			anchor = camera.ViewportToWorldPoint(viewport);
 		}
-		if (settings.Smart.Value)
+		if (!shot.HasValue && settings.Smart.Value)
 		{
 			Vector3 val = camera.WorldToViewportPoint(anchor);
 			if (val.z < 1f || val.x < 0.03f || val.x > 0.97f || val.y < 0.08f || val.y > 0.95f)
@@ -206,9 +210,11 @@ internal sealed class FoliaView : IDisposable
 				Place(camera);
 			}
 		}
-		anchor = LyricPlacement.KeepDistance(anchor, camera, settings);
-		root.transform.position = anchor;
-		root.transform.rotation = (settings.FacePlayer.Value ? LyricPlacement.Face(anchor, camera) : orientation);
+		if (!shot.HasValue) anchor = LyricPlacement.KeepDistance(anchor, camera, settings);
+		Vector3 positionAnchor = shot?.Position ?? anchor;
+		root.transform.position = positionAnchor + LyricWeather.Drift(0.26f * settings.FoliaSize.Value);
+		root.transform.rotation = settings.FacePlayer.Value ? LyricPlacement.Face(positionAnchor, camera) :
+			(shot?.Orientation ?? orientation);
 		float num3 = Mathf.Clamp(settings.Distance.Value * 0.65f * settings.FoliaSize.Value, 1.5f, 18f);
 		root.transform.localScale = Vector3.one * (num3 / 960f);
 		canvas.worldCamera = camera;
@@ -219,8 +225,19 @@ internal sealed class FoliaView : IDisposable
 		{
 			val2.SetInt("unity_GUIZTestMode", (settings.AllowWalls.Value && !settings.BehindPlayer.Value) ? 8 : 4);
 		}
-		bool active = settings.AllowWalls.Value || !Physics.Linecast(((Component)camera).transform.position, anchor, LayerMask.GetMask(new string[2] { "Map", "Terrain" }), (QueryTriggerInteraction)1);
+		bool active = shot?.IsVisible(camera, settings) ??
+			(settings.AllowWalls.Value || !Physics.Linecast(camera.transform.position, positionAnchor,
+				PlayerPerspective.TerrainMask, QueryTriggerInteraction.Ignore));
 		root.SetActive(active);
+		if (active)
+		{
+			var weather = LyricWeatherGraphic.Prepare(weatherGraphic, root.transform, true, settings.FoliaOpacity.Value);
+			if (weather != null)
+			{
+				weatherGraphic = weather;
+				weather.DrawFolia(texture!, settings.FoliaBackground.Value);
+			}
+		}
 		return true;
 	}
 

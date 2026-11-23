@@ -37,6 +37,8 @@ internal sealed class WorldLyrics : IDisposable
 
 		internal readonly TextHalo TranslationHalo = new TextHalo();
 
+		internal LyricWeatherGraphic? Weather;
+
 		internal long LastPosition;
 
 		internal readonly AdaptiveLyrics.Palette Palette = new AdaptiveLyrics.Palette();
@@ -77,6 +79,7 @@ internal sealed class WorldLyrics : IDisposable
 	private float retryAt;
 
 	private float retargetAt;
+	private bool wasCinematic;
 
 	private int serial;
 
@@ -250,8 +253,10 @@ internal sealed class WorldLyrics : IDisposable
 		previousPosition = -1L;
 	}
 
-	internal void Tick(MusicState state, Camera camera, long now)
+	internal void Tick(MusicState state, Camera camera, long now, CinematicLyrics.WorldPlacement? shot)
 	{
+		bool leavingCinematic = wasCinematic && !shot.HasValue;
+		wasCinematic = shot.HasValue;
 		long? num = state.PositionAt(now);
 		if (!num.HasValue)
 		{
@@ -261,7 +266,7 @@ internal sealed class WorldLyrics : IDisposable
 		if (!EnsureFont())
 		{
 			ClearEntries();
-			compatible.Tick(state, camera, now);
+			compatible.Tick(state, camera, now, shot);
 			return;
 		}
 		compatible.Hide();
@@ -296,7 +301,7 @@ internal sealed class WorldLyrics : IDisposable
 		if (num2 >= endMs || string.IsNullOrWhiteSpace(lyricsLine.Text))
 		{
 			Retire();
-			Animate(camera, num2);
+			Animate(camera, num2, shot);
 			return;
 		}
 		int num4 = -1;
@@ -307,7 +312,7 @@ internal sealed class WorldLyrics : IDisposable
 			if (num4 < 0)
 			{
 				Retire();
-				Animate(camera, num2);
+				Animate(camera, num2, shot);
 				return;
 			}
 			LyricToken lyricToken = lyricTokens.Tokens[num4];
@@ -323,17 +328,18 @@ internal sealed class WorldLyrics : IDisposable
 			Retire();
 			renderKey = text;
 			retryAt = Time.unscaledTime + 0.8f;
-			current = Spawn(lyricsLine, endMs, camera);
+			current = Spawn(lyricsLine, endMs, camera, shot);
 		}
-		else if (value != 2 && current != null && !settings.Follow.Value && settings.Smart.Value && Time.unscaledTime >= retargetAt && NearEdge(current, camera))
+		else if (!shot.HasValue && current != null && (leavingCinematic ||
+			(value != 2 && !settings.Follow.Value && settings.Smart.Value && Time.unscaledTime >= retargetAt && NearEdge(current, camera))))
 		{
 			Place(current, camera);
 			retargetAt = Time.unscaledTime + 0.08f;
 		}
-		Animate(camera, num2);
+		Animate(camera, num2, shot);
 	}
 
-	private Entry? Spawn(LyricsLine raw, long next, Camera camera)
+	private Entry? Spawn(LyricsLine raw, long next, Camera camera, CinematicLyrics.WorldPlacement? shot)
 	{
 		if ((Object)(object)root == (Object)null || (Object)(object)font == (Object)null)
 		{
@@ -362,7 +368,13 @@ internal sealed class WorldLyrics : IDisposable
 		Bounds textBounds = ((TMP_Text)entry.Main).textBounds;
 		float num2 = Mathf.Max(0.3f, textBounds.size.y);
 		entry.Translation.transform.localPosition = new Vector3(0f, (0f - num2) * 0.6f - 0.2f, 0f);
-		if (!Place(entry, camera))
+		if (shot is { } placement)
+		{
+			entry.Anchor = placement.Position;
+			entry.Orientation = placement.Orientation;
+			entry.Viewport = camera.WorldToViewportPoint(placement.Position);
+		}
+		else if (!Place(entry, camera))
 		{
 			DestroyEntry(entry);
 			return null;
@@ -436,6 +448,7 @@ internal sealed class WorldLyrics : IDisposable
 				e.Root.transform.rotation = e.Orientation;
 				e.Anchor = val2;
 				e.Viewport = item;
+				e.Root.SetActive(true);
 				return true;
 			}
 		}
@@ -472,15 +485,16 @@ internal sealed class WorldLyrics : IDisposable
 		}
 	}
 
-	private void Animate(Camera camera, long position)
+	private void Animate(Camera camera, long position, CinematicLyrics.WorldPlacement? shot)
 	{
+		bool shotVisible = shot?.IsVisible(camera, settings) ?? true;
 		for (int num = entries.Count - 1; num >= 0; num--)
 		{
 			Entry entry = entries[num];
 			float unscaledTime = Time.unscaledTime;
 			float num2 = unscaledTime - entry.Born;
 			float num3 = ((entry.Retired < 0f) ? 0f : ((unscaledTime - entry.Retired) / 0.4f));
-			if (entry.Retired >= 0f && (settings.Exit.Value == 3 || num3 >= 1f))
+			if (entry.Retired >= 0f && (shot.HasValue || settings.Exit.Value == 3 || num3 >= 1f))
 			{
 				entries.RemoveAt(num);
 				DestroyEntry(entry);
@@ -510,15 +524,22 @@ internal sealed class WorldLyrics : IDisposable
 						num5 *= 1f - num3 * 0.5f;
 					}
 				}
-				if (settings.Follow.Value)
+				if (shot.HasValue)
+				{
+					entry.Root.SetActive(shotVisible);
+				}
+				else if (settings.Follow.Value)
 				{
 					entry.Anchor = camera.ViewportToWorldPoint(entry.Viewport);
 					bool active = settings.AllowWalls.Value || !Physics.Linecast(((Component)camera).transform.position, entry.Anchor, LayerMask.GetMask(new string[2] { "Map", "Terrain" }), (QueryTriggerInteraction)1);
 					entry.Root.SetActive(active);
 				}
-				entry.Anchor = LyricPlacement.KeepDistance(entry.Anchor, camera, settings);
-				entry.Root.transform.rotation = (settings.FacePlayer.Value ? LyricPlacement.Face(entry.Anchor, camera) : entry.Orientation);
-				entry.Root.transform.position = entry.Anchor + ((Component)camera).transform.up * num6;
+				if (!shot.HasValue) entry.Anchor = LyricPlacement.KeepDistance(entry.Anchor, camera, settings);
+				Vector3 positionAnchor = shot?.Position ?? entry.Anchor;
+				entry.Root.transform.rotation = settings.FacePlayer.Value ? LyricPlacement.Face(positionAnchor, camera) :
+					(shot?.Orientation ?? entry.Orientation);
+				entry.Root.transform.position = positionAnchor + ((Component)camera).transform.up * num6 +
+					LyricWeather.Drift(0.22f * settings.FontSize.Value, entry.Born);
 				entry.Root.transform.localScale = Vector3.one * num5;
 				AdaptiveLyrics.Palette palette = entry.Palette;
 				Bounds bounds = entry.Main.renderer.bounds;
@@ -576,6 +597,12 @@ internal sealed class WorldLyrics : IDisposable
 					}
 				}
 				((TMP_Text)entry.Main).UpdateVertexData((TMP_VertexDataUpdateFlags)17);
+				var weather = LyricWeatherGraphic.Prepare(entry.Weather, entry.Main.transform, false, num4);
+				if (weather != null)
+				{
+					entry.Weather = weather;
+					weather.DrawGlyphs(textInfo);
+				}
 				entry.MainHalo.Update((TMP_Text)(object)entry.Main, settings, entry.Palette);
 				entry.TranslationHalo.Update((TMP_Text)(object)entry.Translation, settings, entry.Palette);
 			}

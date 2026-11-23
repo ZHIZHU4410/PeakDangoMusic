@@ -120,6 +120,14 @@ internal sealed class MusicSettings
 
 	internal readonly ConfigEntry<Key> PerspectiveKey;
 
+	internal readonly ConfigEntry<bool> WorldCommentsEnabled;
+
+	internal readonly ConfigEntry<bool> IdleCameraEnabled;
+
+	internal readonly ConfigEntry<int> IdleCameraSeconds;
+
+	internal readonly ConfigEntry<bool> LyricWeather;
+
 	internal readonly ConfigEntry<bool> AmbienceMix;
 
 	internal readonly ConfigEntry<bool> AmbienceLowPass;
@@ -133,6 +141,11 @@ internal sealed class MusicSettings
 	internal MusicSettings(ConfigFile config)
 	{
 		PerspectiveKey = config.Bind("按键", "切换视角", Key.None, "切换角色视角的按键。None 为未设置，可在播放器设置中修改。");
+		WorldCommentsEnabled = config.Bind("外观", "显示地图热门评论", true, "在地图播放音乐时显示当前歌曲的热门评论。");
+		IdleCameraEnabled = config.Bind("镜头", "启用闲置运镜", true, "在地图中达到设定的无操作时间后自动切换镜头，有输入时恢复所选视角。");
+		IdleCameraSeconds = config.Bind("镜头", "闲置等待秒数", 45,
+			new ConfigDescription("开始自动运镜前的无操作时间。", new AcceptableValueRange<int>(10, 180)));
+		LyricWeather = config.Bind("歌词", "地图天气效果", true, "让地图歌词响应风、雨、雪和附近火源。");
 		PlayerEnabled = config.Bind<bool>("播放器", "启用游戏内音乐", true, "独立于悬浮歌词开关；关闭时停止本机音乐。");
 		Enabled = config.Bind<bool>("连接", "启用漂浮歌词", true, "独立控制歌词显示；关闭歌词不会停止游戏内音乐。");
 		Source = config.Bind<int>("连接", "播放器来源", 0, new ConfigDescription("0=BLF/LX本机API；1=网易云；2=酷狗音乐；3=QQ音乐；4=GD聚合音乐；5=系统媒体会话。", (AcceptableValueBase)(object)new AcceptableValueRange<int>(0, 5), Array.Empty<object>()));

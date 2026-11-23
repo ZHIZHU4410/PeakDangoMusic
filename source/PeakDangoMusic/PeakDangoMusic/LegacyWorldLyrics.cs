@@ -24,6 +24,8 @@ internal sealed class LegacyWorldLyrics : IDisposable
 
 	private TextMesh? original;
 
+	private LyricWeatherGraphic? weatherGraphic;
+
 	private TextMesh? translation;
 
 	private Vector3 viewport;
@@ -51,6 +53,7 @@ internal sealed class LegacyWorldLyrics : IDisposable
 	private float paintAt;
 
 	private float repositionAt;
+	private bool wasCinematic;
 
 	private LyricsLine? line;
 
@@ -128,8 +131,10 @@ internal sealed class LegacyWorldLyrics : IDisposable
 		return val2;
 	}
 
-	internal void Tick(MusicState state, Camera camera, long now)
+	internal void Tick(MusicState state, Camera camera, long now, CinematicLyrics.WorldPlacement? shot)
 	{
+		bool leavingCinematic = wasCinematic && !shot.HasValue;
+		wasCinematic = shot.HasValue;
 		long? num = state.PositionAt(now);
 		if (!num.HasValue || !Ensure())
 		{
@@ -184,9 +189,13 @@ internal sealed class LegacyWorldLyrics : IDisposable
 			animation = new LyricAnimation(lyricsLine, (tokens == null) ? end : (lyricsLine.StartMs + lyricsLine.DurationMs), tokens != null, mode != 1);
 			lastPaint = "";
 			paintAt = 0f;
+			if (!shot.HasValue) Place(camera);
+		}
+		else if (leavingCinematic)
+		{
 			Place(camera);
 		}
-		if (mode != 2 && !settings.Follow.Value && settings.Smart.Value && Time.unscaledTime >= repositionAt)
+		else if (!shot.HasValue && mode != 2 && !settings.Follow.Value && settings.Smart.Value && Time.unscaledTime >= repositionAt)
 		{
 			Vector3 val = camera.WorldToViewportPoint(root.transform.position);
 			if (val.z < 1f || val.x < 0.28f || val.x > 0.72f || val.y < 0.32f || val.y > 0.82f)
@@ -198,7 +207,12 @@ internal sealed class LegacyWorldLyrics : IDisposable
 		{
 			return;
 		}
-		if (settings.Follow.Value)
+		if (shot is { } placement)
+		{
+			root.transform.position = placement.Position;
+			root.SetActive(placement.IsVisible(camera, settings));
+		}
+		else if (settings.Follow.Value)
 		{
 			root.transform.position = camera.ViewportToWorldPoint(viewport);
 			root.SetActive(settings.AllowWalls.Value || !Physics.Linecast(((Component)camera).transform.position, root.transform.position, LayerMask.GetMask(new string[2] { "Map", "Terrain" }), (QueryTriggerInteraction)1));
@@ -208,12 +222,21 @@ internal sealed class LegacyWorldLyrics : IDisposable
 		{
 			LyricMaterial.Apply(material, settings, palette);
 		}
-		root.transform.position = LyricPlacement.KeepDistance(root.transform.position, camera, settings);
-		root.transform.rotation = (settings.FacePlayer.Value ? LyricPlacement.Face(root.transform.position, camera) : orientation);
+		if (!shot.HasValue) root.transform.position = LyricPlacement.KeepDistance(root.transform.position, camera, settings);
+		root.transform.rotation = settings.FacePlayer.Value ? LyricPlacement.Face(root.transform.position, camera) :
+			(shot?.Orientation ?? orientation);
 		float num5 = settings.FontSize.Value * (settings.Distance.Value / 10f);
 		original.characterSize = 0.04f * num5;
 		translation.characterSize = 0.029f * num5;
-		((Component)translation).transform.localPosition = new Vector3(0f, -0.55f * num5, 0f);
+		Vector3 drift = root.transform.InverseTransformVector(LyricWeather.Drift(0.22f * settings.FontSize.Value));
+		original.transform.localPosition = drift;
+		translation.transform.localPosition = drift + new Vector3(0f, -0.55f * num5, 0f);
+		var weather = LyricWeatherGraphic.Prepare(weatherGraphic, original.transform, false, 1f);
+		if (weather != null)
+		{
+			weatherGraphic = weather;
+			weather.DrawBounds(original.GetComponent<MeshRenderer>().localBounds);
+		}
 		if (!(Time.unscaledTime >= paintAt))
 		{
 			return;

@@ -32,6 +32,7 @@ internal static class AmbienceMix
 	private static FieldInfo? visualQuadField;
 	private static FieldInfo? windIntensityField;
 	private static FieldInfo? windActiveField;
+	private static FieldInfo? windDirectionField;
 
 	private static UnityEngine.Object[]? visuals;
 	private static float nextVisualScan;
@@ -105,18 +106,11 @@ internal static class AmbienceMix
 		}
 		lastFrame = Time.frameCount;
 
-		if (settings == null || !settings.AmbienceMix.Value)
+		bool audioEnabled = settings.AmbienceMix.Value;
+		if (!audioEnabled && (!settings.LyricWeather.Value || !settings.Enabled.Value))
 		{
-			mix = Mathf.MoveTowards(mix, 0f, deltaTime * 2f);
-			indoorBlend = 0f;
-			MusicScale = 1f;
-			Cutoff = 22000f;
-			Pan = 0f;
-			Pitch = 1f;
-			EchoWet = 0f;
-			Indoor = 0f;
-			windPhase = 0f;
-			status = "已关闭";
+			ResetAudio(deltaTime);
+			LyricWeather.Tick(false, "", 0f, 0f, Vector3.zero, deltaTime);
 			return;
 		}
 
@@ -133,8 +127,16 @@ internal static class AmbienceMix
 		TrackIndoor(now, deltaTime);
 
 		// 风暴音量是环境基线（常年 0.25/0.35/0.25），只拿来给强度做参考，绝不拿来当开关。
-		float strength = ReadStormAudio(out string heardKind);
 		float seenStrength = ReadParticles(out string seenKind);
+		Vector3 direction = windZone != null && windDirectionField?.GetValue(windZone) is Vector3 windVector
+			? windVector : Vector3.zero;
+		LyricWeather.Tick(settings.LyricWeather.Value && settings.Enabled.Value, seenKind, seenStrength, indoorBlend, direction, deltaTime);
+		if (!audioEnabled)
+		{
+			ResetAudio(deltaTime);
+			return;
+		}
+		float strength = ReadStormAudio(out string heardKind);
 		if (seenKind.Length > 0)
 		{
 			heardKind = seenKind;
@@ -234,6 +236,17 @@ internal static class AmbienceMix
 		}
 	}
 
+	private static void ResetAudio(float dt)
+	{
+		mix = Mathf.MoveTowards(mix, 0f, dt * 2f);
+		MusicScale = Pitch = 1f;
+		Cutoff = 22000f;
+		Pan = EchoWet = Indoor = 0f;
+		windPhase = 0f;
+		kind = "";
+		status = "已关闭";
+	}
+
 	private static float TriggerAt(string kindName)
 	{
 		return kindName switch
@@ -309,7 +322,7 @@ internal static class AmbienceMix
 		}
 
 		float now = Time.unscaledTime;
-		if ((visuals == null || visuals.Length == 0) && now >= nextVisualScan)
+		if (now >= nextVisualScan)
 		{
 			nextVisualScan = now + 2f;
 			try
@@ -564,7 +577,7 @@ internal static class AmbienceMix
 			stormVisualField ??= FieldOf(stormAudioType, "stormVisual");
 			rainVisualField ??= FieldOf(stormAudioType, "rainVisual");
 			windVisualField ??= FieldOf(stormAudioType, "windVisual");
-			stormAudio ??= FirstComponent(stormAudioType);
+			if (stormAudio == null) stormAudio = FirstComponent(stormAudioType);
 		}
 
 		if (stormVisualType != null)
@@ -579,6 +592,7 @@ internal static class AmbienceMix
 		{
 			windIntensityField ??= FieldOf(windZoneType, "windIntensity");
 			windActiveField ??= FieldOf(windZoneType, "windActive");
+			windDirectionField ??= FieldOf(windZoneType, "currentWindDirection");
 
 			if (windZone == null)
 			{

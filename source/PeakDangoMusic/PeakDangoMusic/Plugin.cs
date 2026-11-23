@@ -16,7 +16,7 @@ namespace PeakDangoMusic;
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-	internal const string Version = "2.4.1";
+	internal const string Version = "2.4.2";
 
 	internal MusicSettings Settings;
 
@@ -35,6 +35,8 @@ public sealed class Plugin : BaseUnityPlugin
     private WorldComments worldComments;
 
 	private ScreenLyrics screen;
+
+	private CinematicLyrics cinematicLyrics;
 
 	private FoliaView folia;
 
@@ -120,6 +122,7 @@ public sealed class Plugin : BaseUnityPlugin
         Perspective = new PlayerPerspective();
         worldComments = new WorldComments(this);
 		screen = new ScreenLyrics(Settings);
+		cinematicLyrics = new CinematicLyrics(Settings);
 		folia = new FoliaView(Settings);
 		((BaseUnityPlugin)this).Config.SettingChanged += Changed;
 		window = new MusicWindow();
@@ -216,7 +219,7 @@ public sealed class Plugin : BaseUnityPlugin
             Key key = Settings.PerspectiveKey.Value;
             if (!window.Open && current != null && Cursor.lockState == CursorLockMode.Locked &&
                 IsPerspectiveKey(key, current.allKeys.Count) && current[key].wasPressedThisFrame &&
-                Perspective.HasGameplayCamera(Camera.main))
+                Perspective.GameplayCamera != null)
                 Perspective.Mode = (Perspective.Mode + 1) % PlayerPerspective.Names.Length;
         }
 
@@ -243,14 +246,16 @@ public sealed class Plugin : BaseUnityPlugin
 		}
 	}
 
-	private void TickLyrics()
+	private void TickLyrics(bool cinematic = false, Camera? currentCamera = null)
 	{
 		contrast.Tick();
+		cinematicLyrics.Tick(cinematic, Time.unscaledDeltaTime);
 		Scene activeScene = SceneManager.GetActiveScene();
 		string name = activeScene.name;
 		bool flag = Time.unscaledTime < previewUntil && preview != null;
 		if (!Settings.Enabled.Value)
 		{
+			cinematicLyrics.SetLyrics(null, 0L);
 			LyricDisplayStatus = "歌词显示：已关闭（可在悬浮歌词设置中开启）";
 			Renderer.Hide();
 			screen.Hide();
@@ -259,6 +264,7 @@ public sealed class Plugin : BaseUnityPlugin
 		}
 		long now = MusicClock.Now;
 		MusicState musicState = (flag ? new MusicState(connected: true, "preview", preview.Title, preview.Artist, Math.Clamp(now - previewTick, 0L, previewDuration), previewDuration, playing: true, now, 1.0, preview.Timeline, 1, "预览中") : Client.Snapshot);
+		cinematicLyrics.SetLyrics(musicState, now);
 		long? num = musicState.PositionAt(now);
 		if (!num.HasValue)
 		{
@@ -277,11 +283,14 @@ public sealed class Plugin : BaseUnityPlugin
 			int num2 = musicState.Timeline.FindIndex(Math.Clamp(num.Value + Settings.Offset.Value, 0L, musicState.DurationMs));
 			LyricDisplayStatus = ((num2 < 0) ? "歌词显示：等待第一句开始" : ("当前歌词：" + musicState.Timeline.Lines[num2].Text));
 		}
-		Camera main = Camera.main;
-		screenMode = window.Open || name == "Title" || Cursor.visible || (int)Cursor.lockState != 1 || (Object)(object)Character.localCharacter == (Object)null || (Object)(object)main == (Object)null;
+		Camera? main = currentCamera != null ? currentCamera : Camera.main;
+		screenMode = window.Open || name == "Title" || (!cinematic && (Cursor.visible || Cursor.lockState != CursorLockMode.Locked))
+			|| Character.localCharacter == null || main == null;
+		CinematicLyrics.WorldPlacement? shot = cinematic && !screenMode && main != null
+			? cinematicLyrics.Place(main, Perspective.IdleShotId) : null;
 		if (Settings.Style.Value != "dango")
 		{
-			if (folia.Tick(musicState, main, screenMode, now))
+			if (folia.Tick(musicState, main, screenMode, now, shot))
 			{
 				Renderer.Hide();
 				screen.Hide();
@@ -300,27 +309,72 @@ public sealed class Plugin : BaseUnityPlugin
 		else
 		{
 			screen.Hide();
-			Renderer.Tick(musicState, main, now);
+			Renderer.Tick(musicState, main!, now, shot);
 		}
 	}
 
-	private void LateUpdate()
+    private static bool HasCameraInput(CharacterInput? input)
+    {
+        if (Keyboard.current?.anyKey.wasPressedThisFrame == true) return true;
+        if (input == null) return false;
+        float lookThreshold = CharacterInput.action_look?.activeControl?.device is Gamepad ? 0.0625f : 0.25f;
+        return input.movementInput.sqrMagnitude > 0.0625f || input.lookInput.sqrMagnitude > lookThreshold ||
+            input.jumpIsPressed || input.jumpWasPressed || input.sprintIsPressed || input.sprintWasPressed ||
+            input.interactIsPressed || input.interactWasPressed || input.usePrimaryIsPressed || input.usePrimaryWasPressed ||
+            input.useSecondaryIsPressed || input.useSecondaryWasPressed || input.crouchIsPressed || input.crouchWasPressed ||
+            input.dropWasPressed || input.pauseWasPressed || input.emoteIsPressed || input.pingWasPressed ||
+            input.selectBackpackWasPressed || input.selectSlotForwardWasPressed || input.selectSlotBackwardWasPressed ||
+            Mathf.Abs(input.scrollInput) > 0.01f;
+    }
+
+    private IdleCameraBlock GetIdleCameraBlock(Character player)
+    {
+        if (!Settings.IdleCameraEnabled.Value) return IdleCameraBlock.Disabled;
+        if (!Application.isFocused) return IdleCameraBlock.Background;
+        if (window?.Open == true) return IdleCameraBlock.PlayerPanel;
+        var gameUi = GUIManager.instance;
+        if (Time.timeScale <= 0f || (gameUi != null && gameUi.windowBlockingInput))
+            return IdleCameraBlock.Menu;
+
+        return HasCameraInput(player.input) ? IdleCameraBlock.Input : IdleCameraBlock.None;
+    }
+
+    private void LateUpdate()
 	{
 		window?.KeepModalState();
-		TickLyrics();
-        var camera = Camera.main;
+        var camera = Perspective.GameplayCamera;
         var player = Character.localCharacter;
         var scene = SceneManager.GetActiveScene();
         if (scene.name == "Title" || player == null || player.data.dead || player.data.fullyPassedOut ||
-            !Perspective.HasGameplayCamera(camera))
+            camera == null)
         {
             Perspective.ClearView();
             worldComments.Reset();
+            TickLyrics();
             return;
         }
-        Pose view = Perspective.UpdateView(camera!, player);
-        worldComments.Tick(view, scene.handle, Aggregate.PlayingTrack);
+        Pose view = Perspective.UpdateView(camera, player, GetIdleCameraBlock(player), Settings.IdleCameraSeconds.Value);
+        // Place and face lyrics using the current shot, then restore the gameplay camera.
+        if (Perspective.IdleCameraActive)
+        {
+            Perspective.ApplyView(camera);
+            try { TickLyrics(cinematic: true, currentCamera: camera); }
+            finally { Perspective.RestoreCamera(); }
+        }
+        else
+        {
+            TickLyrics(currentCamera: camera);
+        }
+        if (Settings.WorldCommentsEnabled.Value)
+            worldComments.Tick(view, scene.handle, Aggregate.PlayingTrack);
+        else
+            worldComments.Reset();
 	}
+
+    private void OnApplicationFocus(bool focused)
+    {
+        if (!focused) Perspective?.ClearView(IdleCameraBlock.Background);
+    }
 
 	private void OnDisable()
 	{
@@ -338,6 +392,7 @@ public sealed class Plugin : BaseUnityPlugin
 		window?.Draw();
 		screen?.Draw();
 		folia?.Draw();
+		cinematicLyrics?.Draw(window?.Open ?? false);
 	}
 
 	internal void KeepPlayerCursor()=>window?.EnsureCursor();
@@ -397,6 +452,7 @@ public sealed class Plugin : BaseUnityPlugin
 				Aggregate?.Dispose();
 				Renderer?.Dispose();
 				screen?.Dispose();
+				cinematicLyrics?.Dispose();
 				folia?.Dispose();
 				if ((Object)(object)Instance == (Object)(object)this)
 				{

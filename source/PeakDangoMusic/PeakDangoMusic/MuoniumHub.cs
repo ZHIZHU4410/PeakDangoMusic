@@ -12,7 +12,7 @@ using UnityEngine.SceneManagement;
 
 namespace PeakDangoMusic;
 
-internal sealed class MuoniumHub : IDisposable
+internal sealed partial class MuoniumHub : IDisposable
 {
 	private readonly struct PlaylistRow
 	{
@@ -482,16 +482,22 @@ internal sealed class MuoniumHub : IDisposable
 	internal void Tick()
 	{
         if (!plugin.Settings.PlayerEnabled.Value)
+        {
             CancelAutoAdvance();
-        else if (advancePending)
-            Advance();
+            if (playMode == HeartMode) ChangePlaybackMode(OrderedMode);
+        }
+        else
+        {
+            CollectHeart();
+            if (advancePending) Advance();
+        }
         library.Flush(Time.unscaledTime);
         if (Time.unscaledTime >= nextPrefetch)
         {
             nextPrefetch = Time.unscaledTime + 0.5f;
             CoverCache.CollectDownloads();
             UpdateUpcoming();
-            if (!Busy && !polling && plugin.Settings.PrefetchSongs.Value > 0)
+            if (!Busy && !polling && heartTask == null && plugin.Settings.PrefetchSongs.Value > 0)
                 plugin.Aggregate.Prefetch(upcoming, plugin.Settings.AggregateBitrate.Value);
             if (closedAt >= 0f && Time.unscaledTime - closedAt >= CacheLifetime)
             {
@@ -698,7 +704,7 @@ internal sealed class MuoniumHub : IDisposable
         if (upcomingVersion == library.Version && upcomingMode == playMode && upcomingCount == count &&
             upcomingIndex == queueIndex) return;
 
-        var shuffleOrder = playMode == 2 && upcomingMode == 2
+        var shuffleOrder = playMode == ShuffleMode && upcomingMode == ShuffleMode
             ? upcoming.ToArray()
             : Array.Empty<GdMusicApi.Track>();
         upcomingVersion = library.Version;
@@ -707,12 +713,13 @@ internal sealed class MuoniumHub : IDisposable
         upcomingIndex = queueIndex;
         upcoming.Clear();
         int length = library.Queue.Count;
-        if (current == null || playMode == 1 || queueIndex < 0 || queueIndex >= length) return;
+        if (current == null || playMode == RepeatOneMode || queueIndex < 0 || queueIndex >= length) return;
 
         var seen = new HashSet<string> { PlayerLibrary.Key(current) };
-        IEnumerable<GdMusicApi.Track> choices = Enumerable.Range(1, length - 1)
-            .Select(offset => library.Queue[(queueIndex + offset) % length]);
-        if (playMode == 2)
+        IEnumerable<GdMusicApi.Track> choices = playMode == HeartMode
+            ? library.Queue.Skip(queueIndex + 1)
+            : Enumerable.Range(1, length - 1).Select(offset => library.Queue[(queueIndex + offset) % length]);
+        if (playMode == ShuffleMode)
         {
             var available = new HashSet<string>(library.Queue.Select(PlayerLibrary.Key));
             choices = shuffleOrder.Where(track => available.Contains(PlayerLibrary.Key(track)))
@@ -810,6 +817,7 @@ internal sealed class MuoniumHub : IDisposable
 
     internal void InvalidateAccountCaches(string source)
     {
+        if (source == "ncm" && playMode == HeartMode) ChangePlaybackMode(OrderedMode);
         foreach (string key in catalogueCache.Keys.Where(key => key.StartsWith(source + "|", StringComparison.Ordinal)).ToArray())
             catalogueCache.Remove(key);
         plugin.Aggregate.InvalidateSource(source);
@@ -896,6 +904,7 @@ internal sealed class MuoniumHub : IDisposable
 	private void Started(GdMusicApi.Track track)
 	{
         CancelAutoAdvance();
+        tryingHeartBatch = false;
         CancelSeek();
         upcomingVersion = -1;
 		current = track;
@@ -909,7 +918,18 @@ internal sealed class MuoniumHub : IDisposable
         if (current == null) return;
         string key = PlayerLibrary.Key(current);
         int index = library.Queue.FindIndex(track => PlayerLibrary.Key(track) == key);
-        if (playMode == 1 || index < 0 || library.Queue.Count == 1)
+        if (playMode == HeartMode)
+        {
+            if (heartTask != null)
+            {
+                endedWhileLoading = true;
+                return;
+            }
+            autoQueue = new Queue<GdMusicApi.Track>(library.Queue.Skip(index + 1));
+            advancePending = true;
+            return;
+        }
+        if (playMode == RepeatOneMode || index < 0 || library.Queue.Count == 1)
         {
             autoQueue = new Queue<GdMusicApi.Track>(new[] { current });
         }
@@ -918,7 +938,7 @@ internal sealed class MuoniumHub : IDisposable
             var seen = new HashSet<string> { key };
             var choices = Enumerable.Range(1, library.Queue.Count - 1)
                 .Select(offset => library.Queue[(index + offset) % library.Queue.Count]);
-            if (playMode == 2)
+            if (playMode == ShuffleMode)
             {
                 queueIndex = index;
                 UpdateUpcoming();
@@ -941,8 +961,14 @@ internal sealed class MuoniumHub : IDisposable
         if (autoQueue == null) return;
         if (autoQueue.Count == 0)
         {
-            message = "队列中暂时没有能续播的歌曲";
             CancelAutoAdvance();
+            if (playMode == HeartMode && !tryingHeartBatch)
+                RequestHeart(initial: false);
+            else
+            {
+                tryingHeartBatch = false;
+                message = "队列中暂时没有能续播的歌曲";
+            }
             return;
         }
         Play(autoQueue.Dequeue(), automatic: true);
@@ -956,6 +982,14 @@ internal sealed class MuoniumHub : IDisposable
 
 	private void Next(int direction)
 	{
+        if (playMode == HeartMode)
+        {
+            if (heartTask != null || plugin.Aggregate.PlaybackPending) return;
+            int next = queueIndex + direction;
+            if (next >= 0 && next < library.Queue.Count) Play(library.Queue[next]);
+            else if (direction > 0) RequestHeart(initial: false);
+            return;
+        }
 		if (library.Queue.Count == 0)
 		{
 			return;
@@ -970,7 +1004,7 @@ internal sealed class MuoniumHub : IDisposable
 		}
 		int count = library.Queue.Count;
 		int num;
-        if (playMode == 2)
+        if (playMode == ShuffleMode)
         {
             UpdateUpcoming();
             if (upcoming.Count > 0)
@@ -1380,6 +1414,8 @@ internal sealed class MuoniumHub : IDisposable
 		ChartGrid();
 		if (platform == 0)
 		{
+			if (ActionButton(playMode == HeartMode ? "退出心动模式" : "开启心动模式", 150f))
+				ChangePlaybackMode(playMode == HeartMode ? OrderedMode : HeartMode);
 			string key = "rec:" + Source;
 			if (recRows.Length == 0 && recTask == null && recKey != key)
 			{
@@ -1601,6 +1637,15 @@ internal sealed class MuoniumHub : IDisposable
 			return;
 		}
 		int num = Mathf.Clamp(index, 0, list.Length - 1);
+        if (playMode == HeartMode)
+        {
+            if (page == 5 && list == queueView)
+            {
+                Play(list[num]);
+                return;
+            }
+            ChangePlaybackMode(OrderedMode);
+        }
 		library.Queue.Clear();
 		library.Queue.AddRange((list.Length > 200) ? list[0..200] : list);
 		library.Touch();
@@ -2068,6 +2113,7 @@ internal sealed class MuoniumHub : IDisposable
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
 		if (ActionButton("清空队列", 120f))
 		{
+            if (playMode == HeartMode) ChangePlaybackMode(OrderedMode);
 			library.Queue.Clear();
 			queueIndex = -1;
 			library.Touch();
@@ -2152,6 +2198,19 @@ internal sealed class MuoniumHub : IDisposable
         GUILayout.EndHorizontal();
         if (plugin.CapturingPerspectiveKey)
             Hint("Esc 取消录入。右 Shift 和反斜杠已用于播放器。");
+        GUILayout.Space(12f);
+        if (ActionButton(plugin.Settings.IdleCameraEnabled.Value ? "闲置运镜 · 已开启" : "闲置运镜 · 已关闭", 160f))
+            plugin.Settings.IdleCameraEnabled.Value = !plugin.Settings.IdleCameraEnabled.Value;
+        if (plugin.Settings.IdleCameraEnabled.Value)
+        {
+            plugin.Settings.IdleCameraSeconds.Value = (int)MiniSlider("等待秒数", plugin.Settings.IdleCameraSeconds.Value, 10, 180, 1);
+            Hint("按设定时间连续无操作后开始运镜。移动鼠标、按键或操作手柄即可恢复当前视角。");
+            Hint("打开设置前的运镜状态 · " + plugin.Perspective.IdleStatus);
+        }
+        GUILayout.Space(18f);
+        SectionHeader("地图热门评论", "关闭时立即隐藏地图上的评论。");
+        if (ActionButton(plugin.Settings.WorldCommentsEnabled.Value ? "热门评论 · 已开启" : "热门评论 · 已关闭", 160f))
+            plugin.Settings.WorldCommentsEnabled.Value = !plugin.Settings.WorldCommentsEnabled.Value;
         GUILayout.Space(18f);
         SectionHeader("缓存", $"当前已缓存 {plugin.Aggregate.CachedSongCount} 首。队列会提前加载后续歌曲。");
         plugin.Settings.CacheMinutes.Value = (int)MiniSlider("保留分钟", plugin.Settings.CacheMinutes.Value, 1, 60, 1);
@@ -2796,7 +2855,8 @@ internal sealed class MuoniumHub : IDisposable
 			fontSize = 11
 		};
 		val6.normal.textColor = UiKit.Faint;
-		GUI.Label(new Rect(rect.x + 92f, rect.y + 64f, Mathf.Max(120f, width * 0.26f), 16f), (new string[3] { "顺序播放", "单曲循环", "随机播放" })[playMode] + (plugin.Aggregate.PlaybackPending ? " · 缓存音频中" : ""), val6);
+		GUI.Label(new Rect(rect.x + 92f, rect.y + 64f, Mathf.Max(120f, width * 0.26f), 16f), PlaybackModeNames[playMode] +
+			(heartTask != null ? " · 加载推荐中" : plugin.Aggregate.PlaybackPending ? " · 缓存音频中" : ""), val6);
 		float num2 = rect.x + Mathf.Max(230f, width * 0.3f);
 		Rect rect2 = new Rect(num2, rect.y + 22f, 44f, 44f);
 		Rect rect3 = new Rect(num2 + 52f, rect.y + 18f, 72f, 52f);
@@ -2826,11 +2886,9 @@ internal sealed class MuoniumHub : IDisposable
 				library.Toggle(current);
 			}
 		}, favOn);
-		Rect rect6 = new Rect(rect5.x - 86f, rect.y + 24f, 80f, 36f);
-		DrawPill(rect6, (new string[3] { "顺序", "循环", "随机" })[playMode], () =>
-		{
-			playMode = (playMode + 1) % 3;
-		});
+		Rect rect6 = new Rect(rect5.x - 98f, rect.y + 24f, 92f, 36f);
+		DrawPill(rect6, PlaybackModeButtons[playMode], () =>
+			ChangePlaybackMode((playMode + 1) % (HeartAvailable ? PlaybackModeButtons.Length : HeartMode)));
 		Rect val7 = new Rect(rect6.x - 160f, rect.y + 28f, 150f, 28f);
 		GUI.Label(new Rect(val7.x, val7.y + 4f, 40f, 20f), "音量", val6);
 		plugin.Settings.AggregateVolume.Value = DrawSlider(new Rect(val7.x + 42f, val7.y + 2f, val7.width - 42f, 24f), plugin.Settings.AggregateVolume.Value, 5260366, null);
@@ -3014,6 +3072,7 @@ internal sealed class MuoniumHub : IDisposable
 
 	public void Dispose()
 	{
+        DropHeartRequest();
 		client.Dispose();
 		ClearQr();
 		AvatarCache.Reset();

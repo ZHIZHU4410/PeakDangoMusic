@@ -2,8 +2,10 @@ package com.muoniumplayer.core.music.source;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.HexFormat;
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -23,6 +25,20 @@ public final class MuWeapi {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private MuWeapi() {
+    }
+
+    public static String eapi(String path, String json) {
+        try {
+            String message = "nobody" + path + "use" + json + "md5forencrypt";
+            String digest = HexFormat.of().formatHex(MessageDigest.getInstance("MD5")
+                    .digest(message.getBytes(StandardCharsets.UTF_8)));
+            String plain = path + "-36cd479b6b5-" + json + "-36cd479b6b5-" + digest;
+            Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+            cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec("e82ckenh8dichen8".getBytes(StandardCharsets.UTF_8), "AES"));
+            return HexFormat.of().withUpperCase().formatHex(cipher.doFinal(plain.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.GeneralSecurityException error) {
+            throw new IllegalStateException("无法生成网易云心动请求", error);
+        }
     }
 
     /** weapi 加密结果：{@code params}（二次 AES 后 Base64）与 {@code encSecKey}（RSA 后 hex）。 */

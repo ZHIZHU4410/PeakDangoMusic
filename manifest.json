@@ -1,6 +1,6 @@
 {
   "name": "PeakDangoMusic",
-  "version_number": "2.4.1",
+  "version_number": "2.4.2",
   "website_url": "https://github.com/ZHIZHU4410/PeakDangoMusic",
   "description": "Muonium核心的PEAK音乐播放器：网易云/QQ扫码登录、原生曲库、歌单、收藏队列、GD聚合；沿用Dango/Folia地图悬浮歌词。作者布洛芬。",
   "dependencies": [
