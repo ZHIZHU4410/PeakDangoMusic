@@ -41,7 +41,7 @@ internal sealed class WorldLyrics : IDisposable
 
 		internal long LastPosition;
 
-		internal readonly AdaptiveLyrics.Palette Palette = new AdaptiveLyrics.Palette();
+		internal LyricMaterial.Appearance? Appearance;
 
 		internal Vector3 Anchor;
 
@@ -64,13 +64,15 @@ internal sealed class WorldLyrics : IDisposable
 
 	private readonly List<UnityEngine.Object> resources = new List<UnityEngine.Object>();
 
+	private readonly AdaptiveLyrics.Palette palette = new AdaptiveLyrics.Palette();
+
 	private TMP_FontAsset? font;
 
 	private GameObject? root;
 
 	private Entry? current;
 
-	private string renderKey = "";
+	private (string Song, int Generation, int Line, int Mode, int Token)? renderKey;
 
 	private string songKey = "";
 
@@ -233,13 +235,13 @@ internal sealed class WorldLyrics : IDisposable
 	{
 		Dispose();
 		fontFailed = false;
-		renderKey = "";
+		renderKey = null;
 		cachedIndex = -1;
 	}
 
 	internal void Invalidate()
 	{
-		renderKey = "";
+		renderKey = null;
 		cachedIndex = -1;
 		ClearEntries();
 		compatible.Hide();
@@ -249,7 +251,7 @@ internal sealed class WorldLyrics : IDisposable
 	{
 		ClearEntries();
 		compatible.Hide();
-		renderKey = "";
+		renderKey = null;
 		previousPosition = -1L;
 	}
 
@@ -274,7 +276,7 @@ internal sealed class WorldLyrics : IDisposable
 		if (state.Key != songKey || (previousPosition >= 0 && Math.Abs(num2 - previousPosition) > 1800))
 		{
 			ClearEntries();
-			renderKey = "";
+			renderKey = null;
 			songKey = state.Key;
 		}
 		previousPosition = num2;
@@ -322,11 +324,11 @@ internal sealed class WorldLyrics : IDisposable
 				new LyricsWord(lyricToken.StartMs, Math.Max(1L, lyricToken.EndMs - lyricToken.StartMs), lyricToken.Text)
 			}, lyricsLine.Translation) : current.Line);
 		}
-		string text = state.Key + "/" + state.LyricGeneration + "/" + num3 + "/" + value + "/" + num4;
-		if (text != renderKey || (current == null && Time.unscaledTime >= retryAt))
+		var key = (state.Key, state.LyricGeneration, num3, value, num4);
+		if (key != renderKey || (current == null && Time.unscaledTime >= retryAt))
 		{
 			Retire();
-			renderKey = text;
+			renderKey = key;
 			retryAt = Time.unscaledTime + 0.8f;
 			current = Spawn(lyricsLine, endMs, camera, shot);
 		}
@@ -437,7 +439,7 @@ internal sealed class WorldLyrics : IDisposable
 		float y = textBounds.size.y;
 		textBounds = ((TMP_Text)e.Translation).textBounds;
 		float num2 = Mathf.Clamp(y + textBounds.size.y + 0.4f, 0.4f, 3.5f);
-		int mask = LayerMask.GetMask(new string[2] { "Map", "Terrain" });
+		int mask = PlayerPerspective.TerrainMask;
 		foreach (Vector3 item in enumerable)
 		{
 			Vector3 val2 = camera.ViewportToWorldPoint(item);
@@ -487,7 +489,16 @@ internal sealed class WorldLyrics : IDisposable
 
 	private void Animate(Camera camera, long position, CinematicLyrics.WorldPlacement? shot)
 	{
+		if (entries.Count == 0) return;
+		palette.Update(default);
+		var appearance = LyricMaterial.Read(settings, palette);
 		bool shotVisible = shot?.IsVisible(camera, settings) ?? true;
+		bool characterMode = settings.Mode.Value == 2;
+		bool pop = settings.Pop.Value;
+		bool wiggle = settings.Wiggle.Value;
+		float frequency = settings.Frequency.Value;
+		float amount = settings.Amount.Value;
+		float glyphOffset = 0.03f * settings.FontSize.Value * (settings.Distance.Value / 6.5f);
 		for (int num = entries.Count - 1; num >= 0; num--)
 		{
 			Entry entry = entries[num];
@@ -531,7 +542,8 @@ internal sealed class WorldLyrics : IDisposable
 				else if (settings.Follow.Value)
 				{
 					entry.Anchor = camera.ViewportToWorldPoint(entry.Viewport);
-					bool active = settings.AllowWalls.Value || !Physics.Linecast(((Component)camera).transform.position, entry.Anchor, LayerMask.GetMask(new string[2] { "Map", "Terrain" }), (QueryTriggerInteraction)1);
+					bool active = settings.AllowWalls.Value || !Physics.Linecast(camera.transform.position, entry.Anchor,
+						PlayerPerspective.TerrainMask, QueryTriggerInteraction.Ignore);
 					entry.Root.SetActive(active);
 				}
 				if (!shot.HasValue) entry.Anchor = LyricPlacement.KeepDistance(entry.Anchor, camera, settings);
@@ -541,22 +553,16 @@ internal sealed class WorldLyrics : IDisposable
 				entry.Root.transform.position = positionAnchor + ((Component)camera).transform.up * num6 +
 					LyricWeather.Drift(0.22f * settings.FontSize.Value, entry.Born);
 				entry.Root.transform.localScale = Vector3.one * num5;
-				AdaptiveLyrics.Palette palette = entry.Palette;
-				Bounds bounds = entry.Main.renderer.bounds;
-				palette.Update((Vector2)(camera.WorldToViewportPoint(bounds.center)));
-				Material[] mainMaterials = entry.MainMaterials;
-				for (int i = 0; i < mainMaterials.Length; i++)
+				if (entry.Appearance != appearance)
 				{
-					LyricMaterial.Apply(mainMaterials[i], settings, entry.Palette);
+					foreach (Material material in entry.MainMaterials)
+						LyricMaterial.Apply(material, appearance);
+					foreach (Material material in entry.TranslationMaterials)
+						LyricMaterial.Apply(material, appearance);
+					entry.Appearance = appearance;
 				}
-				mainMaterials = entry.TranslationMaterials;
-				for (int i = 0; i < mainMaterials.Length; i++)
-				{
-					LyricMaterial.Apply(mainMaterials[i], settings, entry.Palette);
-				}
-				((Graphic)entry.Main).color = Color.white;
-				((Graphic)entry.Translation).color = Color.white;
-				((TMP_Text)entry.Translation).alpha = num4;
+				if (entry.Retired < 0f && settings.Translation.Value && entry.Line.Translation.Length > 0)
+					((TMP_Text)entry.Translation).alpha = num4;
 				if (entry.Retired < 0f)
 				{
 					entry.LastPosition = position;
@@ -577,34 +583,34 @@ internal sealed class WorldLyrics : IDisposable
 					int vertexIndex = val.vertexIndex;
 					if (materialReferenceIndex < entry.Original.Length)
 					{
-						LyricGlyphFrame lyricGlyphFrame = entry.Animation.Sample(entry.CharacterToGrapheme[k], (entry.Retired >= 0f) ? entry.LastPosition : position, unscaledTime, settings.Pop.Value || settings.Mode.Value == 2, settings.Wiggle.Value, settings.Frequency.Value, settings.Amount.Value);
-						if (settings.Mode.Value != 2 && !settings.Pop.Value && !settings.Wiggle.Value)
-						{
-							lyricGlyphFrame = new LyricGlyphFrame(1.0, 1.0, 0.0, 0.0, 0.0);
-						}
-						float num7 = num4 * (float)lyricGlyphFrame.Alpha;
+						LyricGlyphFrame lyricGlyphFrame = characterMode || pop || wiggle
+							? entry.Animation.Sample(entry.CharacterToGrapheme[k], entry.LastPosition, unscaledTime,
+								pop || characterMode, wiggle, frequency, amount)
+							: new LyricGlyphFrame(1.0, 1.0, 0.0, 0.0, 0.0);
+						Color32 color = new Color(1f, 1f, 1f, Mathf.Clamp01(num4 * (float)lyricGlyphFrame.Alpha));
 						Vector3[] vertices = entry.Original[materialReferenceIndex].vertices;
 						Vector3[] vertices2 = textInfo.meshInfo[materialReferenceIndex].vertices;
 						Color32[] colors = textInfo.meshInfo[materialReferenceIndex].colors32;
 						Vector3 val2 = (vertices[vertexIndex] + vertices[vertexIndex + 2]) * 0.5f;
 						Quaternion val3 = Quaternion.Euler(0f, 0f, (float)(lyricGlyphFrame.Rotation * 180.0 / Math.PI));
-						float num8 = 0.03f * settings.FontSize.Value * (settings.Distance.Value / 6.5f);
+						Vector3 offset = new Vector3((float)lyricGlyphFrame.XOffset * glyphOffset,
+							(float)lyricGlyphFrame.YOffset * glyphOffset, 0f);
 						for (int l = 0; l < 4; l++)
 						{
-							vertices2[vertexIndex + l] = val2 + val3 * ((vertices[vertexIndex + l] - val2) * (float)lyricGlyphFrame.Scale) + new Vector3((float)lyricGlyphFrame.XOffset * num8, (float)lyricGlyphFrame.YOffset * num8, 0f);
-							colors[vertexIndex + l] = (Color32)(new Color(1f, 1f, 1f, Mathf.Clamp01(num7)));
+							vertices2[vertexIndex + l] = val2 + val3 * ((vertices[vertexIndex + l] - val2) * (float)lyricGlyphFrame.Scale) + offset;
+							colors[vertexIndex + l] = color;
 						}
 					}
 				}
-				((TMP_Text)entry.Main).UpdateVertexData((TMP_VertexDataUpdateFlags)17);
+				((TMP_Text)entry.Main).UpdateVertexData(TMP_VertexDataUpdateFlags.Vertices | TMP_VertexDataUpdateFlags.Colors32);
 				var weather = LyricWeatherGraphic.Prepare(entry.Weather, entry.Main.transform, false, num4);
 				if (weather != null)
 				{
 					entry.Weather = weather;
 					weather.DrawGlyphs(textInfo);
 				}
-				entry.MainHalo.Update((TMP_Text)(object)entry.Main, settings, entry.Palette);
-				entry.TranslationHalo.Update((TMP_Text)(object)entry.Translation, settings, entry.Palette);
+				entry.MainHalo.Update((TMP_Text)(object)entry.Main, settings, palette, entry.MainMaterials);
+				entry.TranslationHalo.Update((TMP_Text)(object)entry.Translation, settings, palette, entry.TranslationMaterials);
 			}
 		}
 	}

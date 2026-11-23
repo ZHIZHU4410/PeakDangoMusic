@@ -16,7 +16,7 @@ namespace PeakDangoMusic;
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-	internal const string Version = "2.4.2";
+	internal const string Version = "2.4.3";
 
 	internal MusicSettings Settings;
 
@@ -252,7 +252,6 @@ public sealed class Plugin : BaseUnityPlugin
 		cinematicLyrics.Tick(cinematic, Time.unscaledDeltaTime);
 		Scene activeScene = SceneManager.GetActiveScene();
 		string name = activeScene.name;
-		bool flag = Time.unscaledTime < previewUntil && preview != null;
 		if (!Settings.Enabled.Value)
 		{
 			cinematicLyrics.SetLyrics(null, 0L);
@@ -262,8 +261,20 @@ public sealed class Plugin : BaseUnityPlugin
 			folia.Suspend();
 			return;
 		}
-		long now = MusicClock.Now;
-		MusicState musicState = (flag ? new MusicState(connected: true, "preview", preview.Title, preview.Artist, Math.Clamp(now - previewTick, 0L, previewDuration), previewDuration, playing: true, now, 1.0, preview.Timeline, 1, "预览中") : Client.Snapshot);
+		MusicState musicState;
+		if (Time.unscaledTime < previewUntil && preview is { } previewTrack)
+		{
+			long sampleTick = MusicClock.Now;
+			musicState = new MusicState(true, "preview", previewTrack.Title, previewTrack.Artist,
+				Math.Clamp(sampleTick - previewTick, 0L, previewDuration), previewDuration,
+				true, sampleTick, 1.0, previewTrack.Timeline, 1, "预览中");
+		}
+		else
+		{
+			musicState = Client.Snapshot;
+		}
+		// All lyric views use the same playback sample and its own timestamp for this frame.
+		long now = musicState.SampleTick;
 		cinematicLyrics.SetLyrics(musicState, now);
 		long? num = musicState.PositionAt(now);
 		if (!num.HasValue)

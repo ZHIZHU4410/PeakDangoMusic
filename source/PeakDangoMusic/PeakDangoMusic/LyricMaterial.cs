@@ -8,15 +8,28 @@ namespace PeakDangoMusic;
 /// </summary>
 internal static class LyricMaterial
 {
-	internal static void Apply(Material material, MusicSettings settings, AdaptiveLyrics.Palette? palette = null)
+	internal readonly record struct Appearance(Color Face, Color Glow, float Brightness, bool GlowEnabled,
+		float GlowStrength, float GlowRadius);
+
+	internal static Appearance Read(MusicSettings settings, AdaptiveLyrics.Palette? palette = null)
 	{
 		// 深色字本身已经压得很暗，不再额外乘亮度
-		float brightness = ((palette != null && palette.IsDark) ? 1f : settings.Brightness.Value);
+		float brightness = palette?.IsDark == true ? 1f : settings.Brightness.Value;
+		return new Appearance(palette?.Face ?? AdaptiveLyrics.Light, palette?.Glow ?? AdaptiveLyrics.Light,
+			brightness, settings.Glow.Value, settings.GlowStrength.Value, settings.GlowRadius.Value);
+	}
+
+	internal static void Apply(Material material, MusicSettings settings, AdaptiveLyrics.Palette? palette = null)
+		=> Apply(material, Read(settings, palette));
+
+	internal static void Apply(Material material, Appearance appearance)
+	{
+		float brightness = appearance.Brightness;
 		Color grey = new Color(brightness, brightness, brightness, 1f);
 
 		if (material.HasProperty("_FaceColor"))
 		{
-			Color face = palette != null ? palette.Face : AdaptiveLyrics.Light;
+			Color face = appearance.Face;
 			material.SetColor("_FaceColor", new Color(face.r * brightness, face.g * brightness, face.b * brightness, 1f));
 		}
 		if (material.HasProperty("_Color"))
@@ -31,8 +44,8 @@ internal static class LyricMaterial
 		if (material.HasProperty("_GlowColor"))
 		{
 			// 光晕跟字色同色，太暗时 palette.Glow 会自动往上提
-			Color glow = palette != null ? palette.Glow : AdaptiveLyrics.Light;
-			float power = brightness * settings.GlowStrength.Value * 4f;
+			Color glow = appearance.Glow;
+			float power = brightness * appearance.GlowStrength * 4f;
 			material.SetColor("_GlowColor", new Color(glow.r * power, glow.g * power, glow.b * power, 1f));
 
 			if (material.HasProperty("_GlowInner"))
@@ -45,14 +58,14 @@ internal static class LyricMaterial
 			}
 			if (material.HasProperty("_GlowPower"))
 			{
-				material.SetFloat("_GlowPower", settings.Glow.Value ? 0.75f : 0f);
+				material.SetFloat("_GlowPower", appearance.GlowEnabled ? 0.75f : 0f);
 			}
 			if (material.HasProperty("_GlowOuter"))
 			{
-				material.SetFloat("_GlowOuter", 0.08f + 0.42f * settings.GlowRadius.Value);
+				material.SetFloat("_GlowOuter", 0.08f + 0.42f * appearance.GlowRadius);
 			}
 
-			if (settings.Glow.Value)
+			if (appearance.GlowEnabled)
 			{
 				material.EnableKeyword("GLOW_ON");
 			}

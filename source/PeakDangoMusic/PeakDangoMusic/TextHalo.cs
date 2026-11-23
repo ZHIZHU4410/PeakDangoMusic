@@ -21,26 +21,37 @@ internal sealed class TextHalo : IDisposable
 		internal CanvasRenderer? Canvas;
 	}
 
-	private readonly List<Part> parts = new List<Part>();
+	private readonly List<Part?> parts = new List<Part?>();
 
-	internal void Update(TMP_Text text, MusicSettings settings, AdaptiveLyrics.Palette palette)
+	internal void Update(TMP_Text text, MusicSettings settings, AdaptiveLyrics.Palette palette,
+		Material[]? sharedMaterials = null)
 	{
+		float strength = settings.GlowStrength.Value;
+		if (!settings.Glow.Value || strength <= 0f)
+		{
+			foreach (Part? part in parts) part?.Root.SetActive(false);
+			return;
+		}
 		TMP_TextInfo textInfo = text.textInfo;
-		Material[] fontSharedMaterials = text.fontSharedMaterials;
-		for (int i = 0; i < textInfo.materialCount && i < fontSharedMaterials.Length; i++)
+		sharedMaterials ??= text.fontSharedMaterials;
+		int materialCount = Math.Min(textInfo.materialCount, sharedMaterials.Length);
+		for (int i = 0; i < materialCount; i++)
 		{
 			TMP_MeshInfo val = textInfo.meshInfo[i];
-			if ((Object)(object)val.mesh == (Object)null)
+			Material source = sharedMaterials[i];
+			if (val.mesh == null || val.vertexCount == 0 || source == null || source.HasProperty("_GlowColor"))
 			{
+				if (i < parts.Count) parts[i]?.Root.SetActive(false);
 				continue;
 			}
-			while (parts.Count <= i)
+			while (parts.Count <= i) parts.Add(null);
+			if (parts[i] == null)
 			{
 				Part part = new Part();
 				part.Root = new GameObject("Lyric soft halo", new Type[1] { typeof(RectTransform) });
 				part.Root.layer = ((Component)text).gameObject.layer;
 				part.Root.transform.SetParent(text.transform, false);
-				part.Material = new Material(fontSharedMaterials[i]);
+				part.Material = new Material(source);
 				part.Mesh = new Mesh();
 				if (text is TextMeshProUGUI)
 				{
@@ -57,59 +68,56 @@ internal sealed class TextHalo : IDisposable
 					((Renderer)val2).receiveShadows = false;
 					((Renderer)val2).sortingOrder = ((TextMeshPro)text).renderer.sortingOrder - 1;
 				}
-				parts.Add(part);
+				parts[i] = part;
 			}
-			Part part2 = parts[i];
-			bool flag = settings.Glow.Value && settings.GlowStrength.Value > 0f && !fontSharedMaterials[i].HasProperty("_GlowColor");
-			part2.Root.SetActive(flag);
-			if (flag)
+			Part halo = parts[i]!;
+			halo.Root.layer = text.gameObject.layer;
+			Color glow = palette.Glow;
+			float brightness = 1f + strength * 2f;
+			glow = new Color(glow.r * brightness, glow.g * brightness, glow.b * brightness, Mathf.Clamp01(strength) * 0.75f);
+			halo.Material.EnableKeyword("OUTLINE_ON");
+			halo.Material.SetColor("_FaceColor", Color.clear);
+			halo.Material.SetColor("_OutlineColor", glow);
+			halo.Material.SetFloat("_FaceDilate", 0f);
+			halo.Material.SetFloat("_OutlineWidth", 0.18f + 0.25f * settings.GlowRadius.Value);
+			halo.Material.SetFloat("_OutlineSoftness", 0.2f + 0.5f * settings.GlowRadius.Value);
+			if (halo.Material.HasProperty("_ZTestMode") && source.HasProperty("_ZTestMode"))
 			{
-				part2.Root.layer = ((Component)text).gameObject.layer;
-				Color val3 = palette.Glow;
-				float num = 1f + settings.GlowStrength.Value * 2f;
-				val3 = new Color(val3.r * num, val3.g * num, val3.b * num, Mathf.Clamp01(settings.GlowStrength.Value) * 0.75f);
-				part2.Material.EnableKeyword("OUTLINE_ON");
-				part2.Material.SetColor("_FaceColor", Color.clear);
-				part2.Material.SetColor("_OutlineColor", val3);
-				part2.Material.SetFloat("_FaceDilate", 0f);
-				part2.Material.SetFloat("_OutlineWidth", 0.18f + 0.25f * settings.GlowRadius.Value);
-				part2.Material.SetFloat("_OutlineSoftness", 0.2f + 0.5f * settings.GlowRadius.Value);
-				if (part2.Material.HasProperty("_ZTestMode") && fontSharedMaterials[i].HasProperty("_ZTestMode"))
-				{
-					part2.Material.SetFloat("_ZTestMode", fontSharedMaterials[i].GetFloat("_ZTestMode"));
-				}
-				part2.Mesh.Clear();
-				part2.Mesh.vertices = val.vertices;
-				part2.Mesh.SetUVs(0, val.uvs0);
-				part2.Mesh.SetUVs(1, val.uvs2);
-				part2.Mesh.triangles = val.triangles;
-				if (part2.Colors.Length != val.colors32.Length)
-				{
-					part2.Colors = new Color32[val.colors32.Length];
-				}
-				for (int j = 0; j < part2.Colors.Length; j++)
-				{
-					part2.Colors[j] = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, val.colors32[j].a);
-				}
-				part2.Mesh.colors32 = part2.Colors;
-				part2.Mesh.RecalculateBounds();
-				if ((Object)(object)part2.Canvas != (Object)null)
-				{
-					part2.Canvas.SetMesh(part2.Mesh);
-					part2.Canvas.SetTexture(part2.Material.mainTexture);
-				}
+				halo.Material.SetFloat("_ZTestMode", source.GetFloat("_ZTestMode"));
 			}
+			halo.Mesh.Clear();
+			halo.Mesh.vertices = val.vertices;
+			halo.Mesh.SetUVs(0, val.uvs0);
+			halo.Mesh.SetUVs(1, val.uvs2);
+			halo.Mesh.triangles = val.triangles;
+			if (halo.Colors.Length != val.colors32.Length)
+			{
+				halo.Colors = new Color32[val.colors32.Length];
+			}
+			for (int j = 0; j < halo.Colors.Length; j++)
+			{
+				halo.Colors[j] = new Color32(byte.MaxValue, byte.MaxValue, byte.MaxValue, val.colors32[j].a);
+			}
+			halo.Mesh.colors32 = halo.Colors;
+			halo.Mesh.RecalculateBounds();
+			if (halo.Canvas != null)
+			{
+				halo.Canvas.SetMesh(halo.Mesh);
+				halo.Canvas.SetTexture(halo.Material.mainTexture);
+			}
+			halo.Root.SetActive(true);
 		}
-		for (int k = textInfo.materialCount; k < parts.Count; k++)
+		for (int k = materialCount; k < parts.Count; k++)
 		{
-			parts[k].Root.SetActive(false);
+			parts[k]?.Root.SetActive(false);
 		}
 	}
 
 	public void Dispose()
 	{
-		foreach (Part part in parts)
+		foreach (Part? part in parts)
 		{
+			if (part == null) continue;
 			Object.Destroy((Object)(object)part.Root);
 			Object.Destroy((Object)(object)part.Mesh);
 			Object.Destroy((Object)(object)part.Material);
