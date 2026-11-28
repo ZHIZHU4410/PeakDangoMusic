@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -271,26 +272,36 @@ public final class MuQQApi {
         return out;
     }
 
-    public List<Track> getPlaylistTracks(String dissid, int num) {
-        long disstid;
-        try {
-            disstid = Long.parseLong(dissid);
-        } catch (NumberFormatException e) {
-            disstid = 0L;
-        }
-        Map<String, Object> param = linked("disstid", disstid, "onlysong", 0,
-                "song_begin", 0, "song_num", num);
+    public List<Track> getPlaylistTracks(String dissid) {
+        long disstid = Long.parseLong(dissid);
+        final int pageSize = 200;
         Map<String, Object> overrideComm = linked("ct", "24", "cv", "0");
-        JsonObject data = musicu("music.srfDissInfo.DissInfo", "CgiGetDiss",
-                param, false, null, "req", overrideComm);
-        JsonArray list = JsonExt.arrOrNull(data, "songlist");
         List<Track> out = new ArrayList<>();
-        if (list == null) return out;
-        for (JsonElement element : list) {
-            try {
-                out.add(parseTrack(element.getAsJsonObject()));
-            } catch (Exception ignored) {
+        var seenPages = new HashSet<JsonArray>();
+        int total = 0;
+        for (int offset = 0; ; ) {
+            Map<String, Object> param = linked("disstid", disstid, "onlysong", 0,
+                    "song_begin", offset, "song_num", pageSize);
+            JsonObject data = musicu("music.srfDissInfo.DissInfo", "CgiGetDiss",
+                    param, false, null, "req", overrideComm);
+            JsonArray list = JsonExt.arrOrNull(data, "songlist");
+            if (offset == 0) {
+                JsonObject info = JsonExt.objOrNull(data, "dirinfo");
+                total = intOr(data, "total_song_num", 0);
+                if (total <= 0 && info != null) total = intOr(info, "songnum", 0);
             }
+            if (list == null || list.isEmpty() || !seenPages.add(list)) {
+                if (offset < total) throw new MusicApiException("QQ：歌单曲目批次缺失", null);
+                break;
+            }
+            for (JsonElement element : list) {
+                try {
+                    out.add(parseTrack(element.getAsJsonObject()));
+                } catch (Exception ignored) {
+                }
+            }
+            offset += list.size();
+            if (total > 0 && offset >= total) break;
         }
         return out;
     }

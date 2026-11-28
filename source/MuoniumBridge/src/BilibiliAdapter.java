@@ -9,7 +9,8 @@ final class BilibiliAdapter {
   var out=new JsonObject();String op=q.get("op").getAsString();
   switch(op){
    case "search":{
-    var rows=new JsonArray();for(var t:BilibiliMusicService.search(q.get("query").getAsString(),20)){var row=new JsonObject();row.addProperty("id",BilibiliMusicService.sourceKey(t.bvid,t.page));row.addProperty("title",t.title);row.addProperty("artist",t.artist);row.addProperty("album","");row.addProperty("cover",t.coverUrl);row.addProperty("source","bilibili-native");rows.add(row);}out.add("tracks",rows);break;
+    int page=q.has("page")?q.get("page").getAsInt():1;
+    var rows=new JsonArray();for(var t:BilibiliMusicService.search(q.get("query").getAsString(),PeakMuoniumBridge.SEARCH_PAGE_SIZE,page)){var row=new JsonObject();row.addProperty("id",BilibiliMusicService.sourceKey(t.bvid,t.page));row.addProperty("title",t.title);row.addProperty("artist",t.artist);row.addProperty("album","");row.addProperty("cover",t.coverUrl);row.addProperty("source","bilibili-native");rows.add(row);}out.add("tracks",rows);break;
    }
    case "resolve":{
     var stream=BilibiliMusicService.getSongUrl(q.get("trackId").getAsString(),Quality.STANDARD);if(stream==null||stream.url==null||stream.url.isEmpty())throw new IllegalStateException("audio unavailable");

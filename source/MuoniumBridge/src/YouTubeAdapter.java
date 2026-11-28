@@ -5,8 +5,8 @@ final class YouTubeAdapter {
  static JsonObject handle(JsonObject q)throws Exception{
   var out=new JsonObject();String op=q.get("op").getAsString();
   switch(op){
-   case "search":out.add("tracks",tracks(YouTubeMusicService.search(q.get("query").getAsString(),20)));break;
-   case "playlist":var playlist=YouTubeMusicService.getPlaylist(q.get("playlistId").getAsString(),200);out.add("tracks",tracks(playlist.tracks));break;
+   case "search":out.add("tracks",tracks(YouTubeMusicService.search(q.get("query").getAsString(),50)));break;
+   case "playlist":var playlist=YouTubeMusicService.getPlaylist(q.get("playlistId").getAsString(),0);out.add("tracks",tracks(playlist.tracks));break;
    case "resolve":{
     var stream=YouTubeMusicService.getSongUrl(q.get("trackId").getAsString(),Quality.STANDARD);
     if(stream==null||stream.url==null||stream.url.isEmpty())throw new IllegalStateException("audio unavailable");

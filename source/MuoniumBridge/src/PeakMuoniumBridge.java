@@ -10,6 +10,7 @@ import javax.imageio.ImageIO;
 
 /** PEAK adapter; upstream service code is in vendor, Apache-2.0. No listening socket. */
 public final class PeakMuoniumBridge {
+    static final int SEARCH_PAGE_SIZE = 30;
     final Gson gson=new Gson();
     final MuMusicApi api=new MuMusicApi();
     final Map<String,QrCode> qr=new HashMap<>();
@@ -96,7 +97,7 @@ public final class PeakMuoniumBridge {
             }
             case "search":{
                 int page=q.has("page")?Math.max(1,q.get("page").getAsInt()):1;
-                var rows=source==MusicSource.QQ?api.getQq().search(text(q,"query"),20,page):api.getNetease().search(text(q,"query"),20,(page-1)*20);
+                var rows=source==MusicSource.QQ?api.getQq().search(text(q,"query"),SEARCH_PAGE_SIZE,page):api.getNetease().search(text(q,"query"),SEARCH_PAGE_SIZE,(page-1)*SEARCH_PAGE_SIZE);
                 out.add("tracks",list(rows));break;
             }
             case "discover":{
@@ -127,7 +128,7 @@ public final class PeakMuoniumBridge {
             }
             case "playlist":{
                 String id=text(q,"playlistId");if(!id.matches("[0-9]{1,24}"))throw new IllegalArgumentException("playlist id");
-                var rows=source==MusicSource.QQ?api.getQq().getPlaylistTracks(id,200):api.getNetease().getPlaylistTracks(id,200);
+                var rows=source==MusicSource.QQ?api.getQq().getPlaylistTracks(id):api.getNetease().getPlaylistTracks(id);
                 out.add("tracks",list(rows));break;
             }
             case "resolve":{

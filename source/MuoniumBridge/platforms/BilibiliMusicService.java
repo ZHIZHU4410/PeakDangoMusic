@@ -124,7 +124,7 @@ public final class BilibiliMusicService {
         }
     }
 
-    public static List<Track> search(String query, int limit) {
+    public static List<Track> search(String query, int limit, int page) {
         if (query == null || query.trim().isEmpty()) return List.of();
         int effectiveLimit = Math.max(1, Math.min(50, limit));
         String keyword = query.trim();
@@ -132,10 +132,11 @@ public final class BilibiliMusicService {
         try {
             DirectVideo direct = parseDirectVideo(keyword);
             if (direct != null) {
+                if (page > 1) return List.of();
                 Track track = loadVideo(direct.bvid, direct.page);
                 return track == null ? List.of() : List.of(track);
             }
-            return searchVideos(keyword, effectiveLimit);
+            return searchVideos(keyword, effectiveLimit, page);
         } catch (Throwable throwable) {
             System.err.println("[Music/Bilibili] Search failed for " + keyword + ": "
                     + describe(throwable));
@@ -334,11 +335,12 @@ public final class BilibiliMusicService {
         }
     }
 
-    private static List<Track> searchVideos(String keyword, int limit) throws Exception {
+    private static List<Track> searchVideos(String keyword, int limit, int page) throws Exception {
         TreeMap<String, String> params = new TreeMap<>();
         params.put("search_type", "video");
         params.put("keyword", keyword);
-        params.put("page", "1");
+        params.put("page", String.valueOf(Math.max(1, page)));
+        params.put("page_size", String.valueOf(limit));
         JsonObject response = wbiGet(API_ROOT, "/wbi/search/type", params, false);
         requireSuccessful(response, "search");
 

@@ -4,330 +4,251 @@ using UnityEngine;
 
 namespace PeakDangoMusic;
 
-/// <summary>
-/// 设置里那块调色盘：左边明度/饱和度方块，右边色相条，下面是预设和保存。
-/// 界面颜色和歌词字色各用一份，互不影响。
-/// </summary>
 internal static class ThemePicker
 {
-	internal static readonly string[] PresetNames = new string[6] { "玻璃白", "桃粉", "晴蓝", "薄荷", "琥珀", "暮紫" };
-
-	internal static readonly string[] PresetHex = new string[6] { "", "#FF9AB0", "#7FC4F2", "#8FE0C4", "#F2C46B", "#B79CF0" };
-
-	// 歌词字色的第一个预设是纯白，不是空值，点了就是白色。
-	internal static readonly string[] PresetHexLyric = new string[6] { "#FFFFFF", "#FF9AB0", "#7FC4F2", "#8FE0C4", "#F2C46B", "#B79CF0" };
+	private static readonly string[] PresetNames = { "白色", "黑色", "桃粉", "晴蓝", "薄荷", "琥珀", "暮紫", "正红" };
+	private static readonly string[] PresetHex = { "#FFFFFF", "#000000", "#FF9AB0", "#7FC4F2", "#8FE0C4", "#F2C46B", "#B79CF0", "#FF0000" };
 
 	private sealed class Wheel
 	{
-		internal ConfigEntry<string>? Entry;
-		internal Action<string>? Applied;
-		internal Texture2D? Square;
-		internal Texture2D? Strip;
+		internal readonly int ControlHint;
+		internal string? Applied;
+		internal string Hex = "";
 		internal float Hue;
-		internal float Sat;
-		internal float Val;
-		internal float SquareHue = float.NaN;
-		internal bool DragSquare;
-		internal bool DragStrip;
-		internal float SavedAt = -10f;
-	}
+		internal float Saturation;
+		internal float Value;
+		internal int DragArea;
 
-	private static readonly Wheel ThemeWheel = new Wheel
-	{
-		Hue = 0.72f,
-		Sat = 0.55f,
-		Val = 0.9f
-	};
-
-	private static readonly Wheel LyricWheel = new Wheel
-	{
-		Hue = 0f,
-		Sat = 0f,
-		Val = 1f
-	};
-
-	private static GUIStyle? small;
-	private static GUIStyle? pill;
-
-	internal static void Load(string hex)
-	{
-		ThemeWheel.Applied = UiKit.ApplyThemeHex;
-		ApplyHex(ThemeWheel, hex, 0.72f, 0.55f, 0.9f);
-		UiKit.ApplyThemeHex(hex);
-	}
-
-	internal static void Draw(Plugin plugin, float width)
-	{
-		ThemeWheel.Entry = plugin.Settings.ThemeColor;
-		ThemeWheel.Applied = UiKit.ApplyThemeHex;
-		DrawWheel(plugin, width, ThemeWheel, "当前：默认玻璃白", "默认玻璃白");
-	}
-
-	internal static void DrawLyric(Plugin plugin, float width)
-	{
-		LyricWheel.Entry = plugin.Settings.LyricColor;
-		LyricWheel.Applied = null;
-		DrawWheel(plugin, width, LyricWheel, "当前：跟随深浅字色", "恢复跟随");
-	}
-
-	private static void ApplyHex(Wheel wheel, string hex, float hue, float sat, float val)
-	{
-		Color parsed;
-		if (!string.IsNullOrEmpty(hex) && UiKit.TryParseHex(hex, out parsed))
+		internal Wheel(string id)
 		{
-			Color.RGBToHSV(new Color(parsed.r, parsed.g, parsed.b, 1f), out hue, out sat, out val);
+			ControlHint = id.GetHashCode();
 		}
-		wheel.Hue = hue;
-		wheel.Sat = sat;
-		wheel.Val = val;
+
+		internal void Sync(string stored, Color fallback)
+		{
+			Applied = stored;
+			Hex = stored;
+			Color.RGBToHSV(UiKit.TryParseHex(stored, out var color) ? color : fallback, out Hue, out Saturation, out Value);
+		}
 	}
 
-	private static Color Picked(Wheel wheel)
+	private static readonly Wheel Theme = new Wheel("muonium-theme-color");
+	private static readonly Wheel InterfaceText = new Wheel("muonium-interface-text-color");
+	private static readonly Wheel Lyrics = new Wheel("muonium-lyric-color");
+	private static readonly AdaptiveLyrics.Palette LyricPalette = new AdaptiveLyrics.Palette();
+	private static Texture2D? saturationMask;
+	private static Texture2D? valueMask;
+	private static Texture2D? hueStrip;
+	private static GUIStyle? small;
+	private static GUIStyle? centered;
+	private static GUIStyle? hexStyle;
+	private static GUISkin? styleSkin;
+	private static int styleVersion = -1;
+
+	internal static void Draw(Plugin plugin)
 	{
-		return Color.HSVToRGB(wheel.Hue, Mathf.Clamp01(wheel.Sat), Mathf.Clamp(wheel.Val, 0.35f, 1f));
+		DrawWheel(plugin.Settings.ThemeColor, Theme, UiKit.WindowTint, "默认玻璃白");
 	}
 
-	private static void DrawWheel(Plugin plugin, float width, Wheel wheel, string emptyLabel, string resetLabel)
+	internal static void DrawInterfaceText(Plugin plugin)
+	{
+		DrawWheel(plugin.Settings.InterfaceTextColor, InterfaceText, UiKit.Text, "跟随底色");
+	}
+
+	internal static void DrawLyric(Plugin plugin)
+	{
+		LyricPalette.Update(default);
+		DrawWheel(plugin.Settings.LyricColor, Lyrics, LyricPalette.Face, "跟随深浅");
+	}
+
+	private static void DrawWheel(ConfigEntry<string> entry, Wheel wheel, Color fallback, string resetLabel)
 	{
 		EnsureStyles();
+		if (wheel.Applied != entry.Value)
+			wheel.Sync(entry.Value, fallback);
+		else if (wheel.Hex.Length == 0)
+			Color.RGBToHSV(fallback, out wheel.Hue, out wheel.Saturation, out wheel.Value);
 
-		Rect area = GUILayoutUtility.GetRect(width, 112f, new GUILayoutOption[2]
+		const float height = 118f;
+		Rect area = GUILayoutUtility.GetRect(190f, height, GUILayout.ExpandWidth(true));
+		float controlsWidth = Mathf.Clamp(area.width * 0.42f, 92f, 180f);
+		Rect square = new Rect(area.x, area.y, Mathf.Max(32f, area.width - controlsWidth - 38f), height);
+		Rect strip = new Rect(square.xMax + 10f, area.y, 16f, height);
+		float controlsX = strip.xMax + 12f;
+
+		HandleMouse(entry, wheel, square, strip);
+		if (Event.current.type == EventType.Repaint)
 		{
-			GUILayout.Width(width),
-			GUILayout.Height(112f)
-		});
-		Rect squareRect = new Rect(area.x, area.y, 200f, 110f);
-		Rect stripRect = new Rect(area.x + 212f, area.y, 18f, 110f);
-		Rect previewRect = new Rect(area.x + 248f, area.y, 46f, 46f);
-		Rect hexRect = new Rect(area.x + 248f, area.y + 52f, 240f, 22f);
-		Rect resetRect = new Rect(area.x + 248f, area.y + 80f, 108f, 30f);
-		Rect saveRect = new Rect(area.x + 364f, area.y + 80f, 96f, 30f);
-		Rect savedRect = new Rect(area.x + 470f, area.y + 84f, 90f, 22f);
+			EnsureTextures();
+			UiKit.Fill(square, Color.HSVToRGB(wheel.Hue, 1f, 1f));
+			GUI.DrawTexture(square, saturationMask, ScaleMode.StretchToFill, true);
+			GUI.DrawTexture(square, valueMask, ScaleMode.StretchToFill, true);
+			GUI.DrawTexture(strip, hueStrip, ScaleMode.StretchToFill, false);
 
-		HandleMouse(plugin, wheel, squareRect, stripRect);
-
-		EnsureSquare(wheel);
-		EnsureStrip(wheel);
-
-		UiKit.Round(new Rect(squareRect.x - 3f, squareRect.y - 3f, squareRect.width + 6f, squareRect.height + 6f), new Color(1f, 1f, 1f, 0.45f), 12);
-		if (wheel.Square != null)
-		{
-			GUI.DrawTexture(squareRect, wheel.Square, ScaleMode.StretchToFill, true);
+			float x = square.x + wheel.Saturation * (square.width - 1f);
+			float y = square.y + (1f - wheel.Value) * (square.height - 1f);
+			UiKit.Circle(new Rect(x - 5f, y - 5f, 10f, 10f), Color.black);
+			UiKit.Circle(new Rect(x - 3.5f, y - 3.5f, 7f, 7f), Color.white);
+			float markerY = strip.y + wheel.Hue * (strip.height - 1f);
+			UiKit.Fill(new Rect(strip.x - 1f, markerY - 2f, strip.width + 2f, 4f), Color.black);
+			UiKit.Fill(new Rect(strip.x, markerY - 1f, strip.width, 2f), Color.white);
 		}
 
-		float dotX = squareRect.x + wheel.Sat * squareRect.width;
-		float dotY = squareRect.y + (1f - wheel.Val) * squareRect.height;
-		UiKit.Circle(new Rect(dotX - 6f, dotY - 6f, 12f, 12f), new Color(0.05f, 0.07f, 0.1f, 0.75f));
-		UiKit.Circle(new Rect(dotX - 4.5f, dotY - 4.5f, 9f, 9f), Color.white);
-
-		if (wheel.Strip != null)
+		Color shown = UiKit.TryParseHex(entry.Value, out var custom) ? custom : fallback;
+		Rect sample = new Rect(controlsX, area.y, controlsWidth, 30f);
+		if (wheel == Theme)
+			DrawSwatch(sample, shown, 6f);
+		else
 		{
-			GUI.DrawTexture(stripRect, wheel.Strip, ScaleMode.StretchToFill, true);
+			float half = sample.width * 0.5f;
+			DrawSwatch(new Rect(sample.x, sample.y, half, sample.height), Color.white, 3f);
+			DrawSwatch(new Rect(sample.x + half, sample.y, half, sample.height), new Color(0.08f, 0.09f, 0.12f), 3f);
+			centered!.normal.textColor = shown;
+			GUI.Label(new Rect(sample.x, sample.y, half, sample.height), "字色", centered);
+			GUI.Label(new Rect(sample.x + half, sample.y, half, sample.height), "字色", centered);
 		}
-		UiKit.Round(new Rect(stripRect.x, stripRect.y + wheel.Hue * stripRect.height - 2f, stripRect.width, 4f), Color.white, 2);
-		UiKit.Round(previewRect, Picked(wheel), 12);
 
-		string saved = wheel.Entry?.Value ?? "";
-		GUI.Label(hexRect, string.IsNullOrEmpty(saved) ? emptyLabel : ("当前：" + saved), small);
-
-		if (UiKit.Pill(resetRect, resetLabel, pill, string.IsNullOrEmpty(saved)))
+		Rect input = new Rect(controlsX, area.y + 36f, controlsWidth, 26f);
+		string edited = GUI.TextField(input, wheel.Hex, 7, hexStyle);
+		if (edited != wheel.Hex)
 		{
-			if (wheel.Entry != null)
+			wheel.Hex = edited;
+			if ((edited.Length == 6 && edited[0] != '#' || edited.Length == 7 && edited[0] == '#') &&
+				UiKit.TryParseHex(edited, out var color))
 			{
-				wheel.Entry.Value = "";
+				Color.RGBToHSV(color, out wheel.Hue, out wheel.Saturation, out wheel.Value);
+				Apply(entry, wheel, UiKit.ToHex(color));
 			}
-			bool lyric = wheel == LyricWheel;
-			ApplyHex(wheel, "", (lyric ? 0f : 0.72f), (lyric ? 0f : 0.55f), (lyric ? 1f : 0.9f));
-			wheel.Applied?.Invoke("");
-			wheel.SavedAt = Time.unscaledTime;
+		}
+		string hint = wheel.Hex.Length == 0 ? "#RRGGBB" : UiKit.TryParseHex(wheel.Hex, out _) ? "实时应用" : "输入 6 位色号";
+		GUI.Label(new Rect(controlsX, area.y + 64f, controlsWidth, 18f), hint, small);
+		if (UiKit.Pill(new Rect(controlsX, area.y + 86f, controlsWidth, 29f), resetLabel, small!, entry.Value.Length == 0))
+		{
+			Apply(entry, wheel, "");
+			wheel.Sync("", wheel == InterfaceText ? UiKit.Text : wheel == Lyrics ? LyricPalette.Face : UiKit.WindowTint);
 		}
 
-		if (UiKit.Pill(saveRect, "保存", pill, false))
+		GUILayout.Space(6f);
+		for (int row = 0; row < 2; row++)
 		{
-			Color chosen = Picked(wheel);
-			Color stored;
-			if (!string.IsNullOrEmpty(saved) && UiKit.TryParseHex(saved, out stored))
+			Rect presets = GUILayoutUtility.GetRect(190f, 30f, GUILayout.ExpandWidth(true));
+			float cell = presets.width / 4f;
+			for (int col = 0; col < 4; col++)
 			{
-				chosen = stored;
-			}
-			if (wheel.Entry != null)
-			{
-				wheel.Entry.Value = UiKit.ToHex(chosen);
-			}
-			wheel.Applied?.Invoke(wheel.Entry?.Value ?? "");
-			plugin.Config.Save();
-			wheel.SavedAt = Time.unscaledTime;
-		}
-
-		if (Time.unscaledTime - wheel.SavedAt < 2.5f)
-		{
-			GUI.Label(savedRect, "已保存", small);
-		}
-
-		GUILayout.Space(12f);
-		Rect presetsRect = GUILayoutUtility.GetRect(width, 32f, new GUILayoutOption[2]
-		{
-			GUILayout.Width(width),
-			GUILayout.Height(32f)
-		});
-		float cell = 104f;
-		float cursor = presetsRect.x;
-		string[] presets = ((wheel == LyricWheel) ? PresetHexLyric : PresetHex);
-		for (int i = 0; i < PresetNames.Length; i++)
-		{
-			Rect rect = new Rect(cursor, presetsRect.y, cell, 30f);
-			string hex = presets[i];
-			bool active = ((string.IsNullOrEmpty(hex) && string.IsNullOrEmpty(saved)) || (!string.IsNullOrEmpty(hex) && string.Equals(hex, saved, StringComparison.OrdinalIgnoreCase)));
-			UiKit.Circle(new Rect(rect.x + 12f, rect.y + 10f, 10f, 10f), UiKit.ParseHexSafe(hex));
-			if (UiKit.Pill(new Rect(rect.x + 22f, rect.y, cell - 22f, 30f), PresetNames[i], pill, active))
-			{
-				if (wheel.Entry != null)
+				int index = row * 4 + col;
+				Rect button = new Rect(presets.x + cell * col, presets.y, cell - 4f, 26f);
+				string hex = PresetHex[index];
+				bool active = string.Equals(entry.Value, hex, StringComparison.OrdinalIgnoreCase);
+				if (UiKit.Pill(button, PresetNames[index], small!, active))
 				{
-					wheel.Entry.Value = hex;
+					Apply(entry, wheel, hex);
+					wheel.Sync(hex, fallback);
 				}
-				bool lyric = wheel == LyricWheel;
-				ApplyHex(wheel, hex, (lyric ? 0f : 0.72f), (lyric ? 0f : 0.55f), (lyric ? 1f : 0.9f));
-				wheel.Applied?.Invoke(hex);
-				wheel.SavedAt = Time.unscaledTime;
+				if (button.width >= 68f)
+					DrawSwatch(new Rect(button.x + 6f, button.y + 8f, 10f, 10f), UiKit.ParseHexSafe(hex), 2f);
 			}
-			cursor += cell + 8f;
 		}
 	}
 
-	private static void HandleMouse(Plugin plugin, Wheel wheel, Rect squareRect, Rect stripRect)
+	private static void Apply(ConfigEntry<string> entry, Wheel wheel, string hex)
 	{
-		Event current = Event.current;
-		if (current == null)
-		{
-			return;
-		}
-		if (current.type == EventType.MouseDown && current.button == 0)
-		{
-			if (squareRect.Contains(current.mousePosition))
-			{
-				wheel.DragSquare = true;
-			}
-			else if (stripRect.Contains(current.mousePosition))
-			{
-				wheel.DragStrip = true;
-			}
-		}
-		if (wheel.DragSquare && (current.type == EventType.MouseDown || current.type == EventType.MouseDrag))
-		{
-			// 方块上面是亮、下面是暗，左边饱和度低、右边高
-			wheel.Sat = Mathf.Clamp01((current.mousePosition.x - squareRect.x) / squareRect.width);
-			wheel.Val = Mathf.Clamp01(1f - (current.mousePosition.y - squareRect.y) / squareRect.height);
-			current.Use();
-		}
-		if (wheel.DragStrip && (current.type == EventType.MouseDown || current.type == EventType.MouseDrag))
-		{
-			wheel.Hue = Mathf.Clamp01((current.mousePosition.y - stripRect.y) / stripRect.height);
-			current.Use();
-		}
-		if (current.type == EventType.MouseUp)
-		{
-			if (wheel.DragSquare || wheel.DragStrip)
-			{
-				Save(wheel);
-			}
-			wheel.DragSquare = false;
-			wheel.DragStrip = false;
-		}
+		wheel.Applied = hex;
+		if (entry.Value != hex)
+			entry.Value = hex;
 	}
 
-	private static void Save(Wheel wheel)
+	private static void HandleMouse(ConfigEntry<string> entry, Wheel wheel, Rect square, Rect strip)
 	{
-		if (wheel.Entry == null)
+		Event input = Event.current;
+		int id = GUIUtility.GetControlID(wheel.ControlHint, FocusType.Passive);
+		var type = input.GetTypeForControl(id);
+		if (type == EventType.MouseDown && input.button == 0)
 		{
-			return;
+			wheel.DragArea = square.Contains(input.mousePosition) ? 1 : strip.Contains(input.mousePosition) ? 2 : 0;
+			if (wheel.DragArea != 0)
+			{
+				GUIUtility.hotControl = id;
+				GUIUtility.keyboardControl = 0;
+			}
 		}
-		wheel.Entry.Value = UiKit.ToHex(Picked(wheel));
-		wheel.Applied?.Invoke(wheel.Entry.Value);
-		wheel.SavedAt = Time.unscaledTime;
+		if (GUIUtility.hotControl != id || (type != EventType.MouseDown && type != EventType.MouseDrag && type != EventType.MouseUp))
+			return;
+
+		if (wheel.DragArea == 1)
+		{
+			wheel.Saturation = Mathf.Clamp01((input.mousePosition.x - square.x) / (square.width - 1f));
+			wheel.Value = 1f - Mathf.Clamp01((input.mousePosition.y - square.y) / (square.height - 1f));
+		}
+		else
+		{
+			wheel.Hue = Mathf.Clamp01((input.mousePosition.y - strip.y) / (strip.height - 1f));
+		}
+		wheel.Hex = UiKit.ToHex(Color.HSVToRGB(wheel.Hue, wheel.Saturation, wheel.Value));
+		Apply(entry, wheel, wheel.Hex);
+		if (type == EventType.MouseUp)
+		{
+			GUIUtility.hotControl = 0;
+			wheel.DragArea = 0;
+		}
+		input.Use();
 	}
 
 	private static void EnsureStyles()
 	{
-		if (small == null)
+		if (styleSkin != GUI.skin)
 		{
-			small = new GUIStyle(GUI.skin.label)
+			styleSkin = GUI.skin;
+			styleVersion = -1;
+			small = new GUIStyle(GUI.skin.label) { fontSize = 12, alignment = TextAnchor.MiddleCenter, wordWrap = false };
+			centered = new GUIStyle(small) { fontSize = 14, fontStyle = FontStyle.Bold };
+			hexStyle = new GUIStyle(GUI.skin.textField)
 			{
-				fontSize = 12
-			};
-			small.normal.textColor = UiKit.Muted;
-		}
-		if (pill == null)
-		{
-			pill = new GUIStyle(GUI.skin.label)
-			{
-				fontSize = 12,
-				fontStyle = FontStyle.Bold,
-				alignment = TextAnchor.MiddleCenter
+				fontSize = 13,
+				alignment = TextAnchor.MiddleCenter,
+				padding = new RectOffset(4, 4, 0, 0)
 			};
 		}
+		if (styleVersion == UiKit.ThemeVersion)
+			return;
+		styleVersion = UiKit.ThemeVersion;
+		small!.normal.textColor = UiKit.Muted;
+		UiKit.SetTextColor(hexStyle!, UiKit.Text);
+		hexStyle!.normal.background = GUI.skin.textField.normal.background;
+		hexStyle.hover.background = GUI.skin.textField.hover.background;
+		hexStyle.focused.background = GUI.skin.textField.focused.background;
 	}
 
-	// 方块贴图的第 0 行在界面最下面，所以越往上越亮。
-	private static void EnsureSquare(Wheel wheel)
+	private static void DrawSwatch(Rect rect, Color color, float radius)
 	{
-		if (wheel.Square != null && Mathf.Abs(wheel.SquareHue - wheel.Hue) < 0.0005f)
-		{
-			return;
-		}
-		if (wheel.Square != null)
-		{
-			UnityEngine.Object.Destroy(wheel.Square);
-		}
-
-		const int width = 120;
-		const int height = 66;
-		wheel.Square = new Texture2D(width, height, TextureFormat.RGBA32, false)
-		{
-			wrapMode = TextureWrapMode.Clamp,
-			filterMode = FilterMode.Bilinear
-		};
-
-		Color32[] pixels = new Color32[width * height];
-		for (int y = 0; y < height; y++)
-		{
-			float brightness = (float)y / (float)(height - 1);
-			for (int x = 0; x < width; x++)
-			{
-				float saturation = (float)x / (float)(width - 1);
-				pixels[y * width + x] = Color.HSVToRGB(wheel.Hue, saturation, Mathf.Max(0.02f, brightness));
-			}
-		}
-		wheel.Square.SetPixels32(pixels);
-		wheel.Square.Apply(false, false);
-		wheel.SquareHue = wheel.Hue;
+		GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f, color, 0f, radius);
 	}
 
-	// 色相条同理，红色在最上面。
-	private static void EnsureStrip(Wheel wheel)
+	private static void EnsureTextures()
 	{
-		if (wheel.Strip != null)
-		{
+		if (hueStrip != null)
 			return;
-		}
+		const int steps = 256;
+		var colors = new Color[steps];
+		for (int i = 0; i < steps; i++)
+			colors[i] = Color.HSVToRGB(1f - i / (steps - 1f), 1f, 1f);
+		hueStrip = Gradient(1, steps, colors);
+		for (int i = 0; i < steps; i++)
+			colors[i] = new Color(1f, 1f, 1f, 1f - i / (steps - 1f));
+		saturationMask = Gradient(steps, 1, colors);
+		for (int i = 0; i < steps; i++)
+			colors[i] = new Color(0f, 0f, 0f, 1f - i / (steps - 1f));
+		valueMask = Gradient(1, steps, colors);
+	}
 
-		const int width = 4;
-		const int height = 90;
-		wheel.Strip = new Texture2D(width, height, TextureFormat.RGBA32, false)
+	private static Texture2D Gradient(int width, int height, Color[] colors)
+	{
+		var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
 		{
-			wrapMode = TextureWrapMode.Clamp,
-			filterMode = FilterMode.Bilinear
+			filterMode = FilterMode.Bilinear,
+			wrapMode = TextureWrapMode.Clamp
 		};
-
-		Color32[] pixels = new Color32[width * height];
-		for (int y = 0; y < height; y++)
-		{
-			Color color = Color.HSVToRGB(1f - (float)y / (float)(height - 1), 1f, 1f);
-			for (int x = 0; x < width; x++)
-			{
-				pixels[y * width + x] = color;
-			}
-		}
-		wheel.Strip.SetPixels32(pixels);
-		wheel.Strip.Apply(false, false);
+		texture.SetPixels(colors);
+		texture.Apply(false, true);
+		return texture;
 	}
 }

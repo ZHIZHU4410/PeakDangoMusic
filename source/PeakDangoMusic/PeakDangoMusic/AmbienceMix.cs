@@ -5,8 +5,7 @@ using UnityEngine;
 namespace PeakDangoMusic;
 
 /// <summary>
-/// 特殊环境处理：水下、洞内、雨雪大风。
-/// 平时跑图完全不碰音乐，只有这几种情况才动手。
+/// 特殊环境处理：水下、狭窄地形、反重力、混响区、迷雾和天气。
 /// 天气不靠音量阈值判，直接看场景里雨雪风的粒子，飘起来就算。
 /// </summary>
 internal static class AmbienceMix
@@ -37,17 +36,7 @@ internal static class AmbienceMix
 	private static UnityEngine.Object[]? visuals;
 	private static float nextVisualScan;
 
-	private static Type? waterZoneType;
-	private static Type? characterType;
-	private static FieldInfo? localCharacterField;
-	private static FieldInfo? inWaterField;
-	private static FieldInfo? zoneBoundsField;
-	private static FieldInfo? waterPlaneField;
-	private static UnityEngine.Object[]? waterZones;
-	private static float nextWaterScan;
-
 	private static float diveDepth;
-	private static float playerWater = -1f;
 	private static float wetFor;
 	private static float caveFor;
 	private static float lastStormVolume;
@@ -55,12 +44,17 @@ internal static class AmbienceMix
 	private static float lastRainVolume;
 	private static int seenParticles;
 	private static float nextDiag;
+	private static float nextSample;
+	private static string seenKind = "";
+	private static float seenStrength;
+	private static Vector3 direction;
+	private static float stormStrength;
 	private static string kind = "";
 	private static float mix;
 	private static float windPhase;
 	private static float indoorBlend;
-	private static float indoorTarget;
-	private static float nextIndoorProbe;
+	private static AmbienceRegions.Sample regions;
+	private static float nextRegionProbe;
 	private static float nextProbe;
 	private static bool probed;
 	private static int lastFrame = -1;
@@ -80,6 +74,8 @@ internal static class AmbienceMix
 
 	/// <summary>回声湿度，0 是干声。</summary>
 	internal static float EchoWet;
+	internal static float EchoDelay = 0.1f;
+	internal static float EchoFeedback = 0.42f;
 
 	/// <summary>头顶遮挡程度，1 表示完全在洞里。</summary>
 	internal static float Indoor;
@@ -94,7 +90,10 @@ internal static class AmbienceMix
 		"Snow" => "下雪（发闷）",
 		"Wind" => "大风（呼啸）",
 		"Water" => "水下",
-		"Cave" => "洞内",
+		"Cave" => "洞内／狭窄地形",
+		"AntiGravity" => "反重力",
+		"Reverb" => "地图混响区",
+		"GloomFog" => "雾沼迷雾",
 		_ => "正常（不处理）",
 	};
 
@@ -107,9 +106,14 @@ internal static class AmbienceMix
 		lastFrame = Time.frameCount;
 
 		bool audioEnabled = settings.AmbienceMix.Value;
+		float audioDelta = Mathf.Min(deltaTime, 0.05f);
 		if (!audioEnabled && (!settings.LyricWeather.Value || !settings.Enabled.Value))
 		{
-			ResetAudio(deltaTime);
+			nextSample = 0f;
+			nextRegionProbe = 0f;
+			regions = default;
+			indoorBlend = 0f;
+			ResetAudio(audioDelta);
 			LyricWeather.Tick(false, "", 0f, 0f, Vector3.zero, deltaTime);
 			return;
 		}
@@ -124,47 +128,63 @@ internal static class AmbienceMix
 			}
 		}
 
-		TrackIndoor(now, deltaTime);
+		if (now >= nextRegionProbe)
+		{
+			nextRegionProbe = now + 0.18f;
+			regions = AmbienceRegions.Read(Character.localCharacter, now);
+		}
+		diveDepth = regions.Water;
+		indoorBlend = Mathf.Lerp(indoorBlend, regions.Enclosure, 1f - Mathf.Exp(-3f * audioDelta));
 
-		// 风暴音量是环境基线（常年 0.25/0.35/0.25），只拿来给强度做参考，绝不拿来当开关。
-		float seenStrength = ReadParticles(out string seenKind);
-		Vector3 direction = windZone != null && windDirectionField?.GetValue(windZone) is Vector3 windVector
-			? windVector : Vector3.zero;
+		if (now >= nextSample)
+		{
+			nextSample = now + 0.1f;
+			seenStrength = ReadParticles(out seenKind);
+			direction = windZone != null && windDirectionField?.GetValue(windZone) is Vector3 windVector
+				? windVector : Vector3.zero;
+			if (audioEnabled)
+			{
+				// Storm volume is a baseline. Visible particles gate the weather effect.
+				stormStrength = ReadStormAudio(out _);
+			}
+		}
 		LyricWeather.Tick(settings.LyricWeather.Value && settings.Enabled.Value, seenKind, seenStrength, indoorBlend, direction, deltaTime);
 		if (!audioEnabled)
 		{
-			ResetAudio(deltaTime);
+			ResetAudio(audioDelta);
 			return;
 		}
-		float strength = ReadStormAudio(out string heardKind);
-		if (seenKind.Length > 0)
-		{
-			heardKind = seenKind;
-			strength = Mathf.Max(seenStrength, Mathf.Min(0.95f, 0.5f + strength));
-		}
-		else
-		{
-			heardKind = "";
-			strength = 0f;
-		}
-
-		// 角色自己的入水数值最准：沼泽、浅滩里相机还在水面以上，用相机高度根本测不到。
-		playerWater = ReadPlayerWater();
-		diveDepth = ((playerWater >= 0f) ? playerWater : ReadDiveDepth(now));
+		string heardKind = seenKind;
+		float strength = seenKind.Length == 0 ? 0f : Mathf.Max(seenStrength, Mathf.Min(0.95f, 0.5f + stormStrength));
 
 		// 水里待住才算，趟一下就走开不闷。
-		wetFor = ((diveDepth > 0.2f) ? wetFor + deltaTime : 0f);
-		caveFor = ((indoorBlend > 0.35f) ? caveFor + deltaTime : 0f);
+		wetFor = ((diveDepth > 0.2f) ? wetFor + audioDelta : 0f);
+		caveFor = regions.Enclosure >= 0.45f ? caveFor + audioDelta : 0f;
 
-		if (wetFor > 0.5f)
+		if (wetFor > 0.18f && (!regions.GloomFog || diveDepth >= 0.85f))
 		{
 			heardKind = "Water";
 			strength = Mathf.Clamp01(0.35f + 0.65f * diveDepth);
 		}
-		else if (caveFor > 0.9f)
+		else if (regions.AntiGravity > 0.01f)
+		{
+			heardKind = "AntiGravity";
+			strength = Mathf.Lerp(0.42f, 1f, regions.AntiGravity);
+		}
+		else if (regions.GloomFog)
+		{
+			heardKind = "GloomFog";
+			strength = 1f;
+		}
+		else if (regions.Reverb > 0.02f)
+		{
+			heardKind = "Reverb";
+			strength = regions.Reverb;
+		}
+		else if (caveFor > 0.25f)
 		{
 			heardKind = "Cave";
-			strength = 0.85f + 0.15f * indoorBlend;
+			strength = 0.55f + 0.45f * regions.Enclosure;
 		}
 		else if (strength >= TriggerAt(heardKind))
 		{
@@ -179,16 +199,17 @@ internal static class AmbienceMix
 
 		kind = heardKind;
 		float rise = ((strength > mix) ? 2.6f : 1.1f);
-		mix = Mathf.Lerp(mix, strength, 1f - Mathf.Exp(0f - rise * Mathf.Max(0.0001f, deltaTime)));
-		windPhase += deltaTime * (0.6f + 1.4f * mix);
+		float blend = 1f - Mathf.Exp(-rise * audioDelta);
+		mix = Mathf.Lerp(mix, strength, blend);
+		windPhase += audioDelta * (0.6f + 1.4f * mix);
 
-		float gust = 0.5f + 0.5f * Mathf.Sin(windPhase);
 		float depth = Mathf.Clamp(settings.AmbienceFloor.Value, 0.3f, 1.6f);
-		float loud = Mathf.Clamp01(mix * depth);
-		float coverage = ((kind == "Cave") ? loud : Mathf.Lerp(loud, loud * 0.28f, indoorBlend));
+		float loud = Mathf.Clamp01(strength * depth);
+		bool weather = kind is "Rain" or "Snow" or "Wind";
+		float coverage = weather ? Mathf.Lerp(loud, loud * 0.28f, indoorBlend) : loud;
 
-		float floor = FloorFor(kind);
-		float keep = Mathf.Clamp(1f - coverage * (1f - floor), 0.12f, 1f);
+		var effect = EffectFor(kind);
+		float keep = Mathf.Clamp(1f - coverage * (1f - effect.Volume), 0.12f, 1f);
 
 		float wobbleAmplitude = kind switch
 		{
@@ -207,17 +228,26 @@ internal static class AmbienceMix
 			_ => 1f,
 		};
 		float wobble = (kind.Length == 0) ? 0f : (Mathf.Sin(windPhase * wobbleSpeed) * wobbleAmplitude * coverage);
-		MusicScale = Mathf.Clamp(keep * (1f - Mathf.Clamp(wobble, -0.45f, 0.6f)), 0.1f, 1f);
+		float gain = Mathf.Clamp(keep * (1f - Mathf.Clamp(wobble, -0.45f, 0.6f)), 0.1f, 1f);
+		MusicScale = Mathf.Lerp(MusicScale, gain, blend);
 
-		float open = Mathf.Clamp01(coverage);
-		Cutoff = settings.AmbienceLowPass.Value ? Mathf.Exp(Mathf.Lerp(Mathf.Log(22000f), Mathf.Log(CutoffFor(kind)), open)) : 22000f;
+		float cutoff = Mathf.Lerp(Mathf.Log(22000f), Mathf.Log(effect.Cutoff), coverage);
+		Cutoff = settings.AmbienceLowPass.Value ?
+			Mathf.Exp(Mathf.Lerp(Mathf.Log(Cutoff), cutoff, blend)) : 22000f;
 
 		float speedWobble = (kind == "Rain") ? 3.1f : 2.2f;
 		float amountWobble = (kind == "Rain") ? 0.012f : 0.02f;
 		float drifting = ((kind == "Rain" || kind == "Wind") ? (Mathf.Sin(windPhase * speedWobble) * amountWobble) : 0f);
-		Pitch = Mathf.Clamp(1f - (1f - PitchFor(kind)) * Mathf.Clamp01(loud * 0.9f) + drifting * coverage, 0.6f, 1.1f);
+		float pitch = Mathf.Clamp(1f - (1f - effect.Pitch) * (loud * 0.9f) + drifting * coverage, 0.6f, 1.1f);
+		Pitch = Mathf.Lerp(Pitch, pitch, blend);
 
-		EchoWet = EchoFor(kind) * Mathf.Clamp01(loud) * ((kind == "Cave") ? 1f : (1f - 0.85f * indoorBlend));
+		float wet = effect.Wet * loud * (weather ? 1f - 0.85f * indoorBlend : 1f);
+		EchoWet = Mathf.Lerp(EchoWet, wet, blend);
+		if (strength > 0f)
+		{
+			EchoDelay = Mathf.Lerp(EchoDelay, kind == "Reverb" ? regions.ReflectionDelay : effect.Delay, blend);
+			EchoFeedback = Mathf.Lerp(EchoFeedback, kind == "Reverb" ? regions.Feedback : effect.Feedback, blend);
+		}
 
 		float sway = kind switch
 		{
@@ -226,25 +256,28 @@ internal static class AmbienceMix
 			"Rain" => 0.09f,
 			_ => 0.05f,
 		};
-		Pan = Mathf.Clamp(Mathf.Sin(windPhase * 0.82f) * sway * (1f - 0.6f * indoorBlend) * Mathf.Clamp01(mix * 1.2f), -1f, 1f);
+		float pan = Mathf.Clamp(Mathf.Sin(windPhase * 0.82f) * sway * (1f - 0.6f * indoorBlend) * Mathf.Clamp01(strength * 1.2f), -1f, 1f);
+		Pan = Mathf.Lerp(Pan, pan, blend);
 		Indoor = indoorBlend;
 
 		if (Time.unscaledTime >= nextDiag)
 		{
-			nextDiag = Time.unscaledTime + 1f;
-			DiagnosticLog.Write($"[环境音] storm={lastStormVolume:F2} wind={lastWindVolume:F2} rain={lastRainVolume:F2} 粒子={seenKind}:{seenStrength:F2}/{seenParticles}颗 判定={kind}:{strength:F2} 混合={mix:F3} 保留={(MusicScale * 100f):F0}% 低通={Cutoff:F0} 洞={indoorBlend:F2} 角色水={playerWater:F2} 水深={diveDepth:F2}");
+			nextDiag = Time.unscaledTime + 15f;
+			DiagnosticLog.Write($"[环境音] storm={lastStormVolume:F2} wind={lastWindVolume:F2} rain={lastRainVolume:F2} 粒子={seenKind}:{seenStrength:F2}/{seenParticles}颗 判定={kind}:{strength:F2} 混合={mix:F3} 保留={(MusicScale * 100f):F0}% 低通={Cutoff:F0} 遮挡={indoorBlend:F2} 反重={regions.AntiGravity:F2} 混响={regions.Reverb:F2} 水深={diveDepth:F2}");
 		}
 	}
 
 	private static void ResetAudio(float dt)
 	{
+		wetFor = caveFor = diveDepth = stormStrength = 0f;
 		mix = Mathf.MoveTowards(mix, 0f, dt * 2f);
 		MusicScale = Pitch = 1f;
 		Cutoff = 22000f;
 		Pan = EchoWet = Indoor = 0f;
+		EchoDelay = 0.1f;
+		EchoFeedback = 0.42f;
 		windPhase = 0f;
 		kind = "";
-		status = "已关闭";
 	}
 
 	private static float TriggerAt(string kindName)
@@ -258,57 +291,19 @@ internal static class AmbienceMix
 		};
 	}
 
-	private static float FloorFor(string kindName)
-	{
-		return kindName switch
+	private static (float Volume, float Cutoff, float Pitch, float Wet, float Delay, float Feedback) EffectFor(string kindName) =>
+		kindName switch
 		{
-			"Rain" => 0.6f,
-			"Snow" => 0.74f,
-			"Wind" => 0.55f,
-			"Water" => 0.5f,
-			"Cave" => 0.9f,
-			_ => 0.85f,
+			"Rain" => (0.6f, 380f, 0.97f, 0.05f, 0.1f, 0.42f),
+			"Snow" => (0.74f, 480f, 0.95f, 0.08f, 0.1f, 0.42f),
+			"Wind" => (0.55f, 800f, 0.95f, 0.1f, 0.1f, 0.42f),
+			"Water" => (0.5f, 470f, 0.95f, 0.05f, 0.1f, 0.42f),
+			"GloomFog" => (0.78f, 1900f, 1f, 0.23f, 0.125f, 0.4f),
+			"Cave" => (0.86f, 4200f, 0.99f, 0.39f, 0.1f, 0.42f),
+			"AntiGravity" => (0.84f, 4600f, 0.96f, 0.46f, 0.165f, 0.48f),
+			"Reverb" => (0.89f, 6200f, 1f, 0.31f, 0.1f, 0.42f),
+			_ => (1f, 22000f, 1f, 0f, 0.1f, 0.42f),
 		};
-	}
-
-	private static float CutoffFor(string kindName)
-	{
-		return kindName switch
-		{
-			"Rain" => 380f,
-			"Snow" => 480f,
-			"Wind" => 800f,
-			"Water" => 500f,
-			"Cave" => 6000f,
-			_ => 22000f,
-		};
-	}
-
-	private static float PitchFor(string kindName)
-	{
-		return kindName switch
-		{
-			"Rain" => 0.97f,
-			"Snow" => 0.95f,
-			"Wind" => 0.95f,
-			"Water" => 0.95f,
-			"Cave" => 0.99f,
-			_ => 1f,
-		};
-	}
-
-	private static float EchoFor(string kindName)
-	{
-		return kindName switch
-		{
-			"Rain" => 0.05f,
-			"Snow" => 0.08f,
-			"Wind" => 0.1f,
-			"Water" => 0.05f,
-			"Cave" => 0.3f,
-			_ => 0f,
-		};
-	}
 
 	// 只认风暴粒子真的在飘：游戏的风暴音量常年停在 0.25/0.35/0.25 的环境基线，不能当开关用。
 	// 粒子数太少只可能是远处飘的一点雪沫，至少 12 颗才算天气压过来。
@@ -399,166 +394,6 @@ internal static class AmbienceMix
 		{
 		}
 		return total;
-	}
-
-	// 直接问角色“你现在多深在水里”，游戏自己算好了，比用相机高度猜靠谱。
-	// 返回 -1 表示读不到，退回用相机高度估。
-	private static float ReadPlayerWater()
-	{
-		if (characterType == null)
-		{
-			characterType = LookupType("Character");
-			if (characterType != null)
-			{
-				localCharacterField = FieldOf(characterType, "localCharacter");
-				inWaterField = FieldOf(characterType, "inWater");
-			}
-		}
-		if (localCharacterField == null || inWaterField == null)
-		{
-			return -1f;
-		}
-
-		object? local;
-		try
-		{
-			local = localCharacterField.GetValue(null);
-		}
-		catch
-		{
-			return -1f;
-		}
-		if (local == null)
-		{
-			return -1f;
-		}
-
-		float wetValue = FieldFloat(inWaterField, local);
-		return Mathf.Clamp01(wetValue);
-	}
-
-	private static float ReadDiveDepth(float now)
-	{
-		if (waterZoneType == null)
-		{
-			waterZoneType = LookupType("WaterZone");
-			if (waterZoneType == null)
-			{
-				return 0f;
-			}
-			zoneBoundsField = FieldOf(waterZoneType, "zoneBounds");
-			waterPlaneField = FieldOf(waterZoneType, "waterPlane");
-		}
-
-		if ((waterZones == null || waterZones.Length == 0) && now >= nextWaterScan)
-		{
-			nextWaterScan = now + 4f;
-			try
-			{
-				waterZones = UnityEngine.Object.FindObjectsOfType(waterZoneType);
-			}
-			catch
-			{
-				waterZones = null;
-			}
-		}
-
-		Camera? camera = Camera.main;
-		if (camera == null || waterZones == null)
-		{
-			return 0f;
-		}
-
-		Vector3 position = camera.transform.position;
-		float deepest = 0f;
-		for (int i = 0; i < waterZones.Length; i++)
-		{
-			Component? zone = waterZones[i] as Component;
-			if (zone == null)
-			{
-				continue;
-			}
-			if (!Bounds(zone, out float surface, out float minX, out float maxX, out float minZ, out float maxZ))
-			{
-				continue;
-			}
-			if (position.x < minX - 1f || position.x > maxX + 1f || position.z < minZ - 1f || position.z > maxZ + 1f)
-			{
-				continue;
-			}
-			float depth = surface - position.y;
-			if (depth > 0.15f)
-			{
-				deepest = Mathf.Max(deepest, Mathf.Clamp01(depth / 1.6f));
-			}
-		}
-		return deepest;
-	}
-
-	private static bool Bounds(Component zone, out float surface, out float minX, out float maxX, out float minZ, out float maxZ)
-	{
-		surface = 0f;
-		minX = 0f;
-		maxX = 0f;
-		minZ = 0f;
-		maxZ = 0f;
-		try
-		{
-			if (waterPlaneField != null)
-			{
-				Renderer? plane = waterPlaneField.GetValue(zone) as Renderer;
-				if (plane != null)
-				{
-					Bounds bounds = plane.bounds;
-					surface = bounds.max.y;
-					minX = bounds.min.x;
-					maxX = bounds.max.x;
-					minZ = bounds.min.z;
-					maxZ = bounds.max.z;
-					return true;
-				}
-			}
-			if (zoneBoundsField != null)
-			{
-				object? value = zoneBoundsField.GetValue(zone);
-				if (value is Bounds bounds)
-				{
-					surface = bounds.max.y;
-					minX = bounds.min.x;
-					maxX = bounds.max.x;
-					minZ = bounds.min.z;
-					maxZ = bounds.max.z;
-					return true;
-				}
-			}
-		}
-		catch
-		{
-		}
-		return false;
-	}
-
-	private static void TrackIndoor(float now, float deltaTime)
-	{
-		if (now >= nextIndoorProbe)
-		{
-			nextIndoorProbe = now + 0.35f;
-			Camera? camera = Camera.main;
-			if (camera != null)
-			{
-				bool covered;
-				try
-				{
-					covered = Physics.Raycast(camera.transform.position + Vector3.up * 0.2f, Vector3.up, 12f, ~0, QueryTriggerInteraction.Collide);
-				}
-				catch
-				{
-					covered = false;
-				}
-				indoorTarget = covered ? 1f : 0f;
-			}
-		}
-		indoorBlend = Mathf.Lerp(indoorBlend, indoorTarget, 1f - Mathf.Exp(0f - 3f * Mathf.Max(0.0001f, deltaTime)));
 	}
 
 	private static void Probe()

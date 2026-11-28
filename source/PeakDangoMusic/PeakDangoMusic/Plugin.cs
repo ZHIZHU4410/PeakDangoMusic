@@ -16,7 +16,7 @@ namespace PeakDangoMusic;
 [DefaultExecutionOrder(1000)]
 public sealed class Plugin : BaseUnityPlugin
 {
-	internal const string Version = "2.4.3";
+	internal const string Version = "2.4.7";
 
 	internal MusicSettings Settings;
 
@@ -113,7 +113,7 @@ public sealed class Plugin : BaseUnityPlugin
 		Instance = this;
 		((BaseUnityPlugin)this).Config.SaveOnConfigSet = false;
 		Settings = new MusicSettings(((BaseUnityPlugin)this).Config);
-		ThemePicker.Load(Settings.ThemeColor.Value);
+		UiKit.ApplyAppearance(Settings.ThemeColor.Value, Settings.InterfaceTextColor.Value);
 		Fonts = new FontLibrary(Settings.FontFolder.Value);
 		Aggregate = new AggregatePlayer(this);
 		Client = new MusicClient(Settings, Aggregate);
@@ -135,6 +135,13 @@ public sealed class Plugin : BaseUnityPlugin
 
 	private void Changed(object sender, SettingChangedEventArgs args)	{
 		saveAt = Time.unscaledTime + 1f;
+		if (args.ChangedSetting == Settings.ThemeColor || args.ChangedSetting == Settings.InterfaceTextColor)
+		{
+			UiKit.ApplyAppearance(Settings.ThemeColor.Value, Settings.InterfaceTextColor.Value);
+			return;
+		}
+		if (args.ChangedSetting == Settings.LyricColor)
+			return;
 		Renderer?.Invalidate();
 		folia?.Invalidate();
         if (args.ChangedSetting == Settings.LxScriptPath || args.ChangedSetting == Settings.LxChannel)
@@ -147,47 +154,55 @@ public sealed class Plugin : BaseUnityPlugin
 	}
 
 	private bool queuedOpen;
-	internal bool CapturingPerspectiveKey { get; set; }
+	internal enum CameraBinding { None, Perspective, Cinematic }
+	internal CameraBinding RecordingCameraBinding { get; set; }
 
-	private static bool IsPerspectiveKey(Key key, int keyCount) =>
+	private static bool IsCameraKey(Key key, int keyCount) =>
 		(int)key > 0 && (int)key <= keyCount &&
 		key is not (Key.Escape or Key.RightShift or Key.Backslash or Key.IMESelected);
 
-	internal string PerspectiveKeyName
+	internal static string CameraKeyName(Key key)
 	{
-		get
-		{
-			Key key = Settings.PerspectiveKey.Value;
-			Keyboard? keyboard = Keyboard.current;
-			if (!IsPerspectiveKey(key, keyboard?.allKeys.Count ?? Keyboard.KeyCount)) return "未设置";
-			return keyboard?[key].displayName ?? key.ToString();
-		}
+		Keyboard? keyboard = Keyboard.current;
+		if (!IsCameraKey(key, keyboard?.allKeys.Count ?? Keyboard.KeyCount)) return "未设置";
+		return keyboard?[key].displayName ?? key.ToString();
 	}
 
-	private bool UpdatePerspectiveKey(Keyboard? keyboard, bool escapePressed)
+	private bool UpdateCameraBinding(Keyboard? keyboard, bool escapePressed)
 	{
-		if (!CapturingPerspectiveKey) return false;
+		if (RecordingCameraBinding == CameraBinding.None) return false;
 		if (!window.Open || !Hub.ViewingSettings)
 		{
-			CapturingPerspectiveKey = false;
+			RecordingCameraBinding = CameraBinding.None;
 			return false;
 		}
 		if (escapePressed)
 		{
-			CapturingPerspectiveKey = false;
+			RecordingCameraBinding = CameraBinding.None;
 		}
 		else if (keyboard != null)
 		{
 			var keys = keyboard.allKeys;
+			bool perspective = RecordingCameraBinding == CameraBinding.Perspective;
+			var binding = perspective ? Settings.PerspectiveKey : Settings.CinematicKey;
+			Key other = (perspective ? Settings.CinematicKey : Settings.PerspectiveKey).Value;
 			foreach (KeyControl control in keys)
 			{
-				if (!IsPerspectiveKey(control.keyCode, keys.Count) || !control.wasPressedThisFrame) continue;
-				Settings.PerspectiveKey.Value = control.keyCode;
-				CapturingPerspectiveKey = false;
+				if (!control.wasPressedThisFrame || control.keyCode == other ||
+					!IsCameraKey(control.keyCode, keys.Count)) continue;
+				binding.Value = control.keyCode;
+				RecordingCameraBinding = CameraBinding.None;
 				break;
 			}
 		}
 		return true;
+	}
+
+	private static bool IsTyping()
+	{
+		var selected = EventSystem.current?.currentSelectedGameObject;
+		return selected != null && (selected.GetComponent<TMPro.TMP_InputField>() != null ||
+			selected.GetComponent<UnityEngine.UI.InputField>() != null);
 	}
 
     internal void QueueOpenPlayer()=>queuedOpen=true;
@@ -207,18 +222,16 @@ public sealed class Plugin : BaseUnityPlugin
 			}
 		}
 
-        bool capturing = UpdatePerspectiveKey(current, flag);
+        bool capturing = UpdateCameraBinding(current, flag);
         bool hideMini = current != null && current.backslashKey.wasPressedThisFrame;
         bool togglePlayer = current != null && current.rightShiftKey.wasPressedThisFrame;
         if(current==null){try{hideMini=Input.GetKeyDown(KeyCode.Backslash);togglePlayer=Input.GetKeyDown(KeyCode.RightShift);}catch(Exception){}}
-        var selected=EventSystem.current?.currentSelectedGameObject;
-        bool typing=selected!=null && (selected.GetComponent<TMPro.TMP_InputField>()!=null || selected.GetComponent<UnityEngine.UI.InputField>()!=null);
-        if(!typing && !capturing){
+        if(!capturing && !IsTyping()){
             if(togglePlayer){if(window.Open)window.Close();else window.Show(null);}
             if(hideMini)window.ToggleMini();
             Key key = Settings.PerspectiveKey.Value;
             if (!window.Open && current != null && Cursor.lockState == CursorLockMode.Locked &&
-                IsPerspectiveKey(key, current.allKeys.Count) && current[key].wasPressedThisFrame &&
+                IsCameraKey(key, current.allKeys.Count) && current[key].wasPressedThisFrame &&
                 Perspective.GameplayCamera != null)
                 Perspective.Mode = (Perspective.Mode + 1) % PlayerPerspective.Names.Length;
         }
@@ -235,7 +248,6 @@ public sealed class Plugin : BaseUnityPlugin
 		window.CheckResponsive();
         window.TickMotion();
 		window.KeepModalState();
-		UiKit.ApplyThemeHex(Settings.ThemeColor.Value);
 		Client.Configure(Settings);
 		Aggregate.Tick(Settings.PlayerEnabled.Value, Settings.AggregateVolume.Value);
 		Hub.Tick();
@@ -340,11 +352,10 @@ public sealed class Plugin : BaseUnityPlugin
 
     private IdleCameraBlock GetIdleCameraBlock(Character player)
     {
-        if (!Settings.IdleCameraEnabled.Value) return IdleCameraBlock.Disabled;
         if (!Application.isFocused) return IdleCameraBlock.Background;
         if (window?.Open == true) return IdleCameraBlock.PlayerPanel;
         var gameUi = GUIManager.instance;
-        if (Time.timeScale <= 0f || (gameUi != null && gameUi.windowBlockingInput))
+        if (Time.timeScale <= 0f || GUIManager.InPauseMenu || (gameUi != null && gameUi.windowBlockingInput) || IsTyping())
             return IdleCameraBlock.Menu;
 
         return HasCameraInput(player.input) ? IdleCameraBlock.Input : IdleCameraBlock.None;
@@ -364,7 +375,13 @@ public sealed class Plugin : BaseUnityPlugin
             TickLyrics();
             return;
         }
-        Pose view = Perspective.UpdateView(camera, player, GetIdleCameraBlock(player), Settings.IdleCameraSeconds.Value);
+        Keyboard? keyboard = Keyboard.current;
+        Key key = Settings.CinematicKey.Value;
+        bool toggle = keyboard != null && Cursor.lockState == CursorLockMode.Locked &&
+            key != Settings.PerspectiveKey.Value && IsCameraKey(key, keyboard.allKeys.Count) &&
+            keyboard[key].wasPressedThisFrame;
+        Pose view = Perspective.UpdateView(camera, player, GetIdleCameraBlock(player), Settings.IdleCameraSeconds.Value,
+            Settings.IdleCameraEnabled.Value, toggle);
         // Place and face lyrics using the current shot, then restore the gameplay camera.
         if (Perspective.IdleCameraActive)
         {
@@ -389,7 +406,7 @@ public sealed class Plugin : BaseUnityPlugin
 
 	private void OnDisable()
 	{
-		CapturingPerspectiveKey = false;
+		RecordingCameraBinding = CameraBinding.None;
 		window?.Close();
 		folia?.Suspend();
         Perspective?.ClearView();

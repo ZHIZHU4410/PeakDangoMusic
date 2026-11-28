@@ -14,8 +14,14 @@ internal sealed class CinematicLyrics : IDisposable
     }
 
     private readonly record struct Caption(string Original, string Translation);
+    private const float EnterDuration = 0.56f;
+    private const float ExitDuration = 0.36f;
     private readonly MusicSettings settings;
     private float openness;
+    private bool opening;
+    private float transitionFrom;
+    private float transitionTime;
+    private float transitionDuration;
     private int shotId = -1;
     private Vector3 anchor;
     private Quaternion orientation;
@@ -31,8 +37,29 @@ internal sealed class CinematicLyrics : IDisposable
 
     internal void Tick(bool active, float dt)
     {
-        openness = Mathf.MoveTowards(openness, active ? 1f : 0f, dt / 0.55f);
+        float target = active ? 1f : 0f;
+        if (opening != active)
+        {
+            transitionFrom = openness;
+            transitionTime = 0f;
+            transitionDuration = (active ? EnterDuration : ExitDuration) *
+                Mathf.Max(0.35f, Mathf.Abs(target - openness));
+            opening = active;
+        }
+        if (openness != target)
+        {
+            transitionTime += Mathf.Max(0f, dt);
+            float t = Mathf.Clamp01(transitionTime / transitionDuration);
+            // Quintic easing reaches both ends with zero velocity and acceleration.
+            float eased = t * t * t * (t * (6f * t - 15f) + 10f);
+            openness = t >= 1f ? target : Mathf.Lerp(transitionFrom, target, eased);
+        }
         if (!active) shotId = -1;
+        if (!active && openness == 0f)
+        {
+            lastLine = null;
+            caption = previous = default;
+        }
     }
 
     internal WorldPlacement Place(Camera camera, int currentShot)
@@ -76,8 +103,9 @@ internal sealed class CinematicLyrics : IDisposable
 
     internal void SetLyrics(MusicState? state, long time)
     {
+        if (!opening) return;
         LyricsLine? line = null;
-        if (openness > 0f && state?.PositionAt(time) is long timeMs)
+        if (state?.PositionAt(time) is long timeMs)
         {
             long position = Math.Clamp(timeMs + settings.Offset.Value, 0L, state.DurationMs);
             var timeline = state.Timeline;
@@ -101,9 +129,8 @@ internal sealed class CinematicLyrics : IDisposable
     {
         if (openness <= 0f || Event.current.type != EventType.Repaint) return;
 
-        float eased = Mathf.SmoothStep(0f, 1f, openness);
         float height = Screen.height * 0.125f;
-        float shown = height * eased;
+        float shown = height * openness;
         Rect bottom = new Rect(0f, Screen.height - shown, Screen.width, shown);
         var previousMatrix = GUI.matrix;
         var previousColor = GUI.color;
@@ -116,17 +143,20 @@ internal sealed class CinematicLyrics : IDisposable
             GUI.depth = playerOpen ? -900 : -2200;
             GUI.enabled = true;
             GUI.contentColor = Color.white;
-            GUI.color = Color.black;
+            GUI.color = new Color(0f, 0f, 0f, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, 0.45f, openness)));
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, shown), Texture2D.whiteTexture);
             GUI.DrawTexture(bottom, Texture2D.whiteTexture);
 
-            float subtitleOpacity = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.23f, 0.88f, eased));
+            float captionReveal = settings.Translation.Value ? 0.72f : 0.60f;
+            float subtitleOpacity = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(captionReveal, 0.96f, openness));
             float lineBlend = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((Time.unscaledTime - subtitleChanged) / 0.16f));
+            // Clip at the moving bar, with the subtitle anchored to the final screen position.
+            float captionOffset = shown - height;
             GUI.BeginGroup(bottom);
             try
             {
-                DrawCaption(previous, height, subtitleOpacity * (1f - lineBlend));
-                DrawCaption(caption, height, subtitleOpacity * lineBlend);
+                DrawCaption(previous, height, captionOffset, subtitleOpacity * (1f - lineBlend));
+                DrawCaption(caption, height, captionOffset, subtitleOpacity * lineBlend);
             }
             finally { GUI.EndGroup(); }
         }
@@ -140,7 +170,7 @@ internal sealed class CinematicLyrics : IDisposable
         }
     }
 
-    private void DrawCaption(Caption value, float height, float alpha)
+    private void DrawCaption(Caption value, float height, float offset, float alpha)
     {
         if (alpha <= 0.01f || string.IsNullOrWhiteSpace(value.Original)) return;
         if (font == null) font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "Malgun Gothic", "Arial" }, 30);
@@ -157,7 +187,7 @@ internal sealed class CinematicLyrics : IDisposable
         Fit(primary, original, width, bodyHeight);
         primary.normal.textColor = Color.white;
         float x = (Screen.width - width) * 0.5f;
-        float top = translationRow ? height * 0.08f : height * 0.1f;
+        float top = offset + height * (translationRow ? 0.08f : 0.1f);
         GUI.Label(new Rect(x, top, width, bodyHeight), original, primary);
         if (translationRow && !string.IsNullOrWhiteSpace(value.Translation))
         {

@@ -19,6 +19,10 @@ internal sealed class MusicWindow : IDisposable
 	private GUISkin? skin;
 
 	private int skinTheme = -1;
+	private bool? customWindow;
+	private bool? darkControls;
+	private Texture2D? darkField;
+	private Texture2D? lightField;
 
 	private GUIStyle? heading;
 
@@ -294,44 +298,23 @@ internal sealed class MusicWindow : IDisposable
 		Color contentColor = GUI.contentColor;
 		Color backgroundColor = GUI.backgroundColor;
 		int depth = GUI.depth;
-		if ((Object)(object)skin != (Object)null && skinTheme != UiKit.ThemeVersion)
-		{
-            Object.Destroy(skin);
-            foreach(var texture in textures)Object.Destroy(texture);
-            textures.Clear();
-			skin = null;
-		}
 		if ((Object)(object)skin == (Object)null)
 		{
-			if(font == null)font = Font.CreateDynamicFontFromOSFont(new string[3] { "Microsoft YaHei", "SimHei", "Arial" }, 20);
+			if (font == null)
+				font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei UI", "Microsoft YaHei", "SimHei", "Arial" }, 20);
 			skin = Object.Instantiate<GUISkin>(val);
 			skin.font = font;
-			skinTheme = UiKit.ThemeVersion;
 			GUIStyle[] array = new GUIStyle[6] { skin.label, skin.button, skin.toggle, skin.textField, skin.window, skin.box };
 			foreach (GUIStyle val2 in array)
 			{
 				val2.font = font;
 				val2.fontSize = 18;
-				GUIStyleState[] array2 = new GUIStyleState[8] { val2.normal, val2.hover, val2.active, val2.focused, val2.onNormal, val2.onHover, val2.onActive, val2.onFocused };
-				for (int j = 0; j < array2.Length; j++)
-				{
-					array2[j].textColor = UiKit.Text;
-				}
 			}
-			skin.window.normal.background = UiKit.Box(96, 96, new Color(UiKit.WindowTint.r, UiKit.WindowTint.g, UiKit.WindowTint.b, 0.82f), 22);
-			skin.window.onNormal.background = skin.window.normal.background;
 			skin.window.border = new RectOffset(22, 22, 22, 22);
 			skin.window.padding = new RectOffset(22, 22, 18, 18);
-			skin.box.normal.background = UiKit.Box(168, 128, UiKit.Glass(0.24f), 14);
 			skin.box.border = new RectOffset(14, 14, 14, 14);
 			skin.box.padding = new RectOffset(18, 18, 14, 16);
 			skin.box.margin = new RectOffset(0, 0, 0, 0);
-			skin.button.normal.background = UiKit.Box(220, 44, UiKit.Glass(0.26f), 8);
-			skin.button.hover.background = UiKit.Box(220, 44, UiKit.Glass(0.44f), 8);
-			skin.button.active.background = UiKit.Box(220, 44, new Color(0.88f, 0.93f, 1f, 0.07f), 8);
-			skin.button.onNormal.background = UiKit.Box(220, 44, UiKit.GlassLift(0.74f), 8);
-			skin.button.onHover.background = UiKit.Box(220, 44, UiKit.GlassLift(0.88f), 8);
-			skin.button.onActive.background = skin.button.active.background;
 			skin.button.border = new RectOffset(0, 0, 0, 0);
 			skin.button.padding = new RectOffset(16, 16, 8, 8);
 			skin.button.margin = new RectOffset(0, 0, 4, 4);
@@ -343,9 +326,8 @@ internal sealed class MusicWindow : IDisposable
 			skin.toggle.padding.top = 8;
 			skin.toggle.padding.bottom = 8;
 			skin.toggle.margin = new RectOffset(0, 0, 4, 6);
-			skin.textField.normal.background = Background(UiKit.GlassLift(0.62f));
-			skin.textField.hover.background = Background(UiKit.GlassLift(0.78f));
-			skin.textField.focused.background = Background(UiKit.GlassLift(0.9f));
+			darkField = Background(new Color(0.16f, 0.18f, 0.22f, 0.88f));
+			lightField = Background(new Color(1f, 1f, 1f, 0.62f));
 			skin.textField.padding = new RectOffset(12, 12, 10, 10);
 			skin.textField.margin = new RectOffset(0, 0, 4, 4);
 			skin.textField.fixedHeight = 0f;
@@ -375,8 +357,8 @@ internal sealed class MusicWindow : IDisposable
 			{
 				fontSize = 12
 			};
-			subtitle.normal.textColor = new Color(0.52f, 0.6f, 0.68f, 1f);
 		}
+		ApplyAppearance();
 		GUI.skin = skin;
 		try
 		{
@@ -436,6 +418,11 @@ internal sealed class MusicWindow : IDisposable
 
 	private void Content(int id)
 	{
+		if (UiKit.HasCustomTheme)
+		{
+			Color tint = UiKit.WindowTint;
+			UiKit.Round(new Rect(0f, 0f, rect.width, rect.height), new Color(tint.r, tint.g, tint.b, 0.78f), 22);
+		}
 		float num = Mathf.Max(200f, rect.width - 48f);
 		GUILayout.BeginArea(new Rect(24f, 20f, num, Mathf.Max(160f, rect.height - 40f)));
 		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
@@ -546,6 +533,44 @@ internal sealed class MusicWindow : IDisposable
 		}
 		action?.Invoke();
 		return true;
+	}
+
+	private void ApplyAppearance()
+	{
+		if (skinTheme == UiKit.ThemeVersion)
+			return;
+		skinTheme = UiKit.ThemeVersion;
+		UiKit.SetTextColor(skin!.label, UiKit.Text);
+		UiKit.SetTextColor(skin.button, UiKit.Text);
+		UiKit.SetTextColor(skin.toggle, UiKit.Text);
+		UiKit.SetTextColor(skin.textField, UiKit.Text);
+		UiKit.SetTextColor(skin.box, UiKit.Text);
+		UiKit.SetTextColor(heading!, UiKit.Text);
+		UiKit.SetTextColor(subtitle!, UiKit.Muted);
+		if (customWindow != UiKit.HasCustomTheme)
+		{
+			customWindow = UiKit.HasCustomTheme;
+			var tint = UiKit.WindowTint;
+			var background = UiKit.HasCustomTheme ? null : UiKit.Box(96, 96, new Color(tint.r, tint.g, tint.b, 0.82f), 22);
+			var window = skin.window;
+			window.normal.background = window.hover.background = window.active.background = window.focused.background = background;
+			window.onNormal.background = window.onHover.background = window.onActive.background = window.onFocused.background = background;
+		}
+		if (darkControls == UiKit.DarkSurface)
+			return;
+		darkControls = UiKit.DarkSurface;
+		Color surface = UiKit.DarkSurface ? new Color(0.15f, 0.17f, 0.21f) : Color.white;
+		skin.box.normal.background = UiKit.Box(168, 128, Surface(0.24f), 14);
+		skin.button.normal.background = UiKit.Box(220, 44, Surface(0.26f), 8);
+		skin.button.hover.background = UiKit.Box(220, 44, Surface(0.44f), 8);
+		skin.button.active.background = UiKit.Box(220, 44, Surface(0.15f), 8);
+		skin.button.onNormal.background = UiKit.Box(220, 44, Surface(0.74f), 8);
+		skin.button.onHover.background = UiKit.Box(220, 44, Surface(0.88f), 8);
+		skin.button.onActive.background = skin.button.active.background;
+		var field = UiKit.DarkSurface ? darkField : lightField;
+		skin.textField.normal.background = skin.textField.hover.background = skin.textField.active.background = skin.textField.focused.background = field;
+
+		Color Surface(float alpha) => new Color(surface.r, surface.g, surface.b, alpha);
 	}
 
 	private Texture2D Background(Color color)

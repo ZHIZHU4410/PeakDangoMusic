@@ -112,6 +112,8 @@ internal sealed class MusicSettings
 
 	internal readonly ConfigEntry<string> ThemeColor;
 
+	internal readonly ConfigEntry<string> InterfaceTextColor;
+
 	internal readonly ConfigEntry<string> LyricColor;
 
 	internal readonly ConfigEntry<float> MiniX;
@@ -119,6 +121,8 @@ internal sealed class MusicSettings
 	internal readonly ConfigEntry<float> MiniY;
 
 	internal readonly ConfigEntry<Key> PerspectiveKey;
+
+	internal readonly ConfigEntry<Key> CinematicKey;
 
 	internal readonly ConfigEntry<bool> WorldCommentsEnabled;
 
@@ -141,6 +145,7 @@ internal sealed class MusicSettings
 	internal MusicSettings(ConfigFile config)
 	{
 		PerspectiveKey = config.Bind("按键", "切换视角", Key.None, "切换角色视角的按键。None 为未设置，可在播放器设置中修改。");
+		CinematicKey = config.Bind("按键", "切换闲置运镜", Key.None, "地图内手动进入或退出运镜。None 为未设置。");
 		WorldCommentsEnabled = config.Bind("外观", "显示地图热门评论", true, "在地图播放音乐时显示当前歌曲的热门评论。");
 		IdleCameraEnabled = config.Bind("镜头", "启用闲置运镜", true, "在地图中达到设定的无操作时间后自动切换镜头，有输入时恢复所选视角。");
 		IdleCameraSeconds = config.Bind("镜头", "闲置等待秒数", 45,
@@ -203,11 +208,12 @@ internal sealed class MusicSettings
 		Amount = config.Bind<float>("动画", "抖动幅度", 0.8f, new ConfigDescription("对应原项目Wiggle amount：0–2，默认0.8。", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0f, 2f), Array.Empty<object>()));
 		Entrance = config.Bind<int>("动画", "入场", 3, new ConfigDescription("PEAK扩展：0淡入；1上浮；2弹入；3直接。默认3，仅保留原项目逐字显现。", (AcceptableValueBase)(object)new AcceptableValueRange<int>(0, 3), Array.Empty<object>()));
 		ThemeColor = config.Bind<string>("外观", "界面颜色", "", "设置页调色盘选出的颜色，#RRGGBB；留空为默认玻璃白。");
+		InterfaceTextColor = config.Bind<string>("外观", "界面字色", "", "音乐播放器界面的文字颜色，#RRGGBB；留空根据界面底色选择深色或浅色字。");
 		LyricColor = config.Bind<string>("外观", "歌词字色", "", "游戏内悬浮歌词的字色，#RRGGBB；留空跟随深/浅字色设置。");
 		MiniX = config.Bind<float>("外观", "小窗水平位置", 50f, new ConfigDescription("小窗（顶部胶囊）水平位置：0=最左，50=居中，100=最右。", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0f, 100f), Array.Empty<object>()));
 		MiniY = config.Bind<float>("外观", "小窗距顶部", 14f, new ConfigDescription("小窗离屏幕上边的距离（虚拟 1080 高度下的像素）。", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0f, 400f), Array.Empty<object>()));
-		AmbienceMix = config.Bind<bool>("环境音效", "融合环境音", true, "刮风、下雨、暴雪时压低游戏内音乐并做低通，环境过去自动恢复。");
-		AmbienceLowPass = config.Bind<bool>("环境音效", "环境低通", true, "环境越强音乐越闷；关闭后只压低音量。");
+		AmbienceMix = config.Bind<bool>("环境音效", "融合环境音", true, "根据天气、迷雾、水下、地形、反重力和地图混响调整音乐，离开后逐渐恢复。");
+		AmbienceLowPass = config.Bind<bool>("环境音效", "环境低通", true, "开启时，环境音效会按区域压低音乐的高频。");
 		AmbienceFloor = config.Bind<float>("环境音效", "压制强度", 1f, new ConfigDescription("1.0 为默认强度；越大压得越深、滤波越狠、回声越明显。", (AcceptableValueBase)(object)new AcceptableValueRange<float>(0.3f, 1.6f), Array.Empty<object>()));
 		Exit = config.Bind<int>("动画", "退场", 1, new ConfigDescription("0淡出；1上浮；2缩小；3直接消失。", (AcceptableValueBase)(object)new AcceptableValueRange<int>(0, 3), Array.Empty<object>()));
 	}

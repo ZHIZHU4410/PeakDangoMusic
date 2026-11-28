@@ -1,13 +1,9 @@
 package com.muoniumplayer.core.ncm.kugou;
 
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-
-
-import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.UUID;
 
 /**
@@ -16,15 +12,8 @@ import java.util.UUID;
  * <p>设备 GUID 与登录 token 放在同一个文件里，因为它们必须一起保持稳定：token 是绑在账号上的，
  * 但 {@code mid} 参与每一次签名，换了 GUID 会让所有已发出的请求签名失效。</p>
  *
- * <h3>{@code dfid} 为什么是本地生成的</h3>
- * <p>参考实现里的 {@code /v5/url} 直接用一个<b>随机 24 位串</b>当 {@code dfid}
- * （见 {@code module/song_url.js} 的 {@code randomString(24)}），实测 {@code "-"} 也照样能取流。
- * 它只是风控的一个输入，不是一个必须先向服务端「注册」的身份。</p>
- *
- * <p>本项目旧实现走的是另一条路：调 {@code r_register_dev} 用 AES + RSA 换一个服务端签发的
- * {@code dfid}。这条链路在当前环境下<b>恒失败</b>（各种 {@code kg-tid} 都回 {@code error_code=20006}），
- * 于是每次取流都要白白等一次超时，还把 {@code dfid} 留成 {@code "-"}。既然它既不必要又不可用，
- * 就换成本地生成——少一整条会失效的链路，还省掉每次冷启动的一次失败请求。</p>
+ * <p>普通请求沿用本地设备 ID。云歌单服务需要时，通过酷狗注册接口为同一个安装申请服务端签发的 ID，
+ * 并把它作为登录态的一部分交给宿主加密保存。</p>
  *
  * <h3>会员状态为什么要落盘</h3>
  * <p>{@code vipType} 决定「这首歌取不到」要不要提示用户开会员。它是登录时才有的一次网络查询，
@@ -40,6 +29,7 @@ public final class KuGouDevice {
     private static volatile String guid = "";
     private static volatile String mid = "";
     private static volatile String dfid = "";
+    private static volatile String cloudDfid = "";
     /** 上游设备注册形态里的 {@code dev} 串（随机十六进制）。旧凭证文件没有它，读不到就现生成。 */
     private static volatile String dev = "";
     /** 风控指纹里的伪 MAC（形如 {@code AA:BB:CC:DD:EE:FF}，纯随机、不含真实硬件信息）。 */
@@ -72,6 +62,55 @@ public final class KuGouDevice {
     public static String dfid() {
         ensureLoaded();
         return dfid;
+    }
+
+    static String cloudDfid() {
+        ensureLoaded();
+        return cloudDfid;
+    }
+
+    static String registerCloudDevice() {
+        if (!isLoggedIn()) return "";
+        synchronized (LOCK) {
+            if (!cloudDfid.isEmpty()) return cloudDfid;
+
+            JsonObject device = new JsonObject();
+            device.addProperty("imei", guid);
+            device.addProperty("uuid", guid);
+            var payload = KuGouCrypto.playlistAesEncrypt(device.toString());
+            if (payload.str.isEmpty()) return "";
+            JsonObject envelope = new JsonObject();
+            envelope.addProperty("aes", payload.key);
+            try {
+                envelope.addProperty("uid", Long.parseLong(userId));
+            } catch (NumberFormatException error) {
+                return "";
+            }
+            envelope.addProperty("token", token);
+            String encrypted = KuGouCrypto.rsaEncrypt(envelope.toString(), profile);
+            if (encrypted.isEmpty()) return "";
+
+            var params = KuGouHttp.deviceParams();
+            params.put("dfid", "-");
+            params.put("part", "1");
+            params.put("platid", "1");
+            params.put("p", encrypted);
+            byte[] response = KuGouHttp.postRaw("https://userservice.kugou.com", "/risk/v3/r_register_dev",
+                    params, payload.str, KuGouHttp.Sign.ANDROID, null, "application/json");
+            if (response == null) return "";
+            String body = new String(response, StandardCharsets.UTF_8).trim();
+            if (!body.startsWith("{")) {
+                String base64 = body.matches("[A-Za-z0-9+/=]+") ? body : Base64.getEncoder().encodeToString(response);
+                body = KuGouCrypto.playlistAesDecrypt(base64, payload.key);
+            }
+            JsonObject root = KuGouHttp.parseText(body);
+            if (readInt(root, "status") != 1 || !root.has("data") || !root.get("data").isJsonObject()) return "";
+            String issued = readString(root.getAsJsonObject("data"), "dfid");
+            if (!issued.matches("[A-Za-z0-9_-]{8,128}")) return "";
+            cloudDfid = issued;
+            persist();
+            return cloudDfid;
+        }
     }
 
     /**
@@ -162,6 +201,7 @@ public final class KuGouDevice {
         synchronized (LOCK) {
             if (profile == next) return;
             profile = next;
+            cloudDfid = "";
             // 换身份等于换客户端，旧的会员结论不再成立，清掉等下一次查询回填。
             vipType = 0;
             vipExpiresAt = "";
@@ -185,6 +225,8 @@ public final class KuGouDevice {
                                  KuGouProfile newProfile) {
         ensureLoaded();
         synchronized (LOCK) {
+            if (!userId.equals(KuGouSign.nonNull(newUserId).trim()) ||
+                    (newProfile != null && profile != newProfile)) cloudDfid = "";
             token = KuGouSign.nonNull(newToken).trim();
             userId = KuGouSign.nonNull(newUserId).trim();
             if (!KuGouSign.isBlank(newNickname)) nickname = newNickname.trim();
@@ -225,6 +267,7 @@ public final class KuGouDevice {
         synchronized (LOCK) {
             token = "";
             userId = "";
+            cloudDfid = "";
             nickname = "";
             avatarUrl = "";
             vipType = 0;
@@ -243,6 +286,8 @@ public final class KuGouDevice {
                     JsonObject root = PeakDeviceStore.state;
                     guid = readString(root, "guid");
                     dfid = readString(root, "dfid");
+                    cloudDfid = readString(root, "cloud_dfid");
+                    if (!cloudDfid.matches("[A-Za-z0-9_-]{8,128}")) cloudDfid = "";
                     dev = readString(root, "dev");
                     mac = readString(root, "mac");
                     token = readString(root, "token");
@@ -293,6 +338,7 @@ public final class KuGouDevice {
             JsonObject root = new JsonObject();
             root.addProperty("guid", guid);
             root.addProperty("dfid", dfid);
+            if (!cloudDfid.isEmpty()) root.addProperty("cloud_dfid", cloudDfid);
             root.addProperty("dev", dev);
             root.addProperty("mac", mac);
             root.addProperty("token", token);

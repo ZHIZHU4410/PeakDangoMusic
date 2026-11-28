@@ -126,10 +126,11 @@ internal sealed class GdMusicApi : IDisposable
 		{
 			return Array.Empty<Track>();
 		}
-		JToken val = await Get(source, "types=search&name=" + Uri.EscapeDataString(keyword.Trim()) + "&count=20&pages=" + Math.Max(1, page), ct).ConfigureAwait(continueOnCapturedContext: false);
+		const int pageSize = 30;
+		JToken val = await Get(source, "types=search&name=" + Uri.EscapeDataString(keyword.Trim()) + "&count=" + pageSize + "&pages=" + Math.Max(1, page), ct).ConfigureAwait(continueOnCapturedContext: false);
 		return (from o in ((IEnumerable)(((val is JArray) ? val : null) ?? throw new InvalidDataException("GD搜索响应格式错误"))).OfType<JObject>()
 			where !string.IsNullOrEmpty((string)o["id"])
-			select o).Take(20).Select((JObject o) =>
+			select o).Take(pageSize).Select((JObject o) =>
 		{
 			string id = (string)o["id"];
 			string title = ((string)o["name"]) ?? "";

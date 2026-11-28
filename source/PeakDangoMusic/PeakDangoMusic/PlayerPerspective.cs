@@ -60,13 +60,13 @@ internal sealed class PlayerPerspective : IDisposable
     internal Camera? GameplayCamera => gameplayCamera != null && gameplayCamera.isActiveAndEnabled &&
         Time.frameCount - gameplayFrame <= 1 ? gameplayCamera : null;
 
-    internal Pose UpdateView(Camera camera, Character player, IdleCameraBlock blocked, int idleSeconds)
+    internal Pose UpdateView(Camera camera, Character player, IdleCameraBlock blocked, int idleSeconds, bool automatic, bool toggle)
     {
         original = new Pose(camera.transform.position, camera.transform.rotation);
         alternate = original;
         alternateReady = false;
         IdleCameraActive = false;
-        float? idleTime = idle.Update(Time.unscaledTime, blocked, idleSeconds);
+        float? idleTime = idle.Update(Time.unscaledTime, blocked, idleSeconds, automatic, toggle);
         if (!idleTime.HasValue) shots.Reset();
         if (Mode == 0 && !idleTime.HasValue) return original;
 

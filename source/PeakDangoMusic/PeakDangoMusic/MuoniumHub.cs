@@ -5,9 +5,11 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using BepInEx.Configuration;
 using DangoMusic.Core;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 
 namespace PeakDangoMusic;
@@ -57,9 +59,9 @@ internal sealed partial class MuoniumHub : IDisposable
 
 	private const float PlaylistHeight = 54f;
 
-	private const int TrackPageSize = 60;
+	private const int TrackPageSize = 30;
 
-	private const int PlaylistPageSize = 60;
+	private const float TrackPagerHeight = 52f;
 
 	private readonly Plugin plugin;
 
@@ -74,6 +76,7 @@ internal sealed partial class MuoniumHub : IDisposable
 	private string pendingSource = "";
 
 	private string query = "";
+	private string searchQuery = "";
 
 	private string playlistId = "";
 
@@ -98,6 +101,7 @@ internal sealed partial class MuoniumHub : IDisposable
 	private int platform;
 
 	private int searchPage = 1;
+	private int trackPage;
 
 	private int queueIndex = -1;
 
@@ -112,6 +116,7 @@ internal sealed partial class MuoniumHub : IDisposable
 	private Vector2 songScroll;
 
 	private GdMusicApi.Track[] rows = Array.Empty<GdMusicApi.Track>();
+	private GdMusicApi.Track[] searchRows = Array.Empty<GdMusicApi.Track>();
 
 	private GdMusicApi.Track? current;
 
@@ -165,6 +170,8 @@ internal sealed partial class MuoniumHub : IDisposable
 	private readonly List<PlaylistRow> libraryRows = new List<PlaylistRow>();
 
 	private JObject[] libraryPlaylists = Array.Empty<JObject>();
+	private string? kugouLibraryError;
+	private bool kugouNeedsLogin;
 
 	private int discoverPage;
 
@@ -175,6 +182,7 @@ internal sealed partial class MuoniumHub : IDisposable
 	private GdMusicApi.Track[] cachedTracks = Array.Empty<GdMusicApi.Track>();
 
 	private int cachedCount = -1;
+	private int cachedTrackStart = -1;
 
 	private float cachedLabelWidth = -1f;
 
@@ -268,7 +276,7 @@ internal sealed partial class MuoniumHub : IDisposable
 
 	private Task<GdMusicApi.Track[]>? recTask;
 
-	private int recOffset;
+	private int recPage;
 
 	private string recNote = "";
 
@@ -377,6 +385,8 @@ internal sealed partial class MuoniumHub : IDisposable
         plugin.Aggregate.TrackLoadFailed += LoadFailed;
 	}
 
+	private int styleTheme = -1;
+
 	private void Styles()
 	{
 		if (heading == null)
@@ -477,6 +487,32 @@ internal sealed partial class MuoniumHub : IDisposable
 			};
 			navSelected = new GUIStyle(nav);
 		}
+		if (styleTheme == UiKit.ThemeVersion)
+			return;
+		styleTheme = UiKit.ThemeVersion;
+		UiKit.SetTextColor(heading, UiKit.Text);
+		UiKit.SetTextColor(bigHeading!, UiKit.Text);
+		UiKit.SetTextColor(section!, UiKit.Text);
+		UiKit.SetTextColor(center!, UiKit.Text);
+		UiKit.SetTextColor(rowTitle!, UiKit.Text);
+		UiKit.SetTextColor(titleSmall!, UiKit.Faint);
+		UiKit.SetTextColor(messageStyle!, UiKit.Faint);
+		UiKit.SetTextColor(muted!, UiKit.Muted);
+		UiKit.SetTextColor(small!, UiKit.Muted);
+		UiKit.SetTextColor(authorNoteStyle!, UiKit.Muted);
+		UiKit.SetTextColor(rowMeta!, UiKit.Muted);
+		UiKit.SetTextColor(badge!, UiKit.Muted);
+		UiKit.SetTextColor(card!, UiKit.Text);
+		UiKit.SetTextColor(cardOn!, UiKit.Ink);
+		UiKit.SetTextColor(nav!, UiKit.Text);
+		UiKit.SetTextColor(navSelected!, UiKit.Text);
+		card!.normal.background = GUI.skin.button.normal.background;
+		card.hover.background = GUI.skin.button.hover.background;
+		card.active.background = cardOn!.active.background = GUI.skin.button.active.background;
+		cardOn.normal.background = GUI.skin.button.onNormal.background;
+		cardOn.hover.background = GUI.skin.button.onHover.background;
+		if (searchField != null)
+			UiKit.SetTextColor(searchField, UiKit.Text);
 	}
 
 	internal void Tick()
@@ -497,8 +533,9 @@ internal sealed partial class MuoniumHub : IDisposable
             nextPrefetch = Time.unscaledTime + 0.5f;
             CoverCache.CollectDownloads();
             UpdateUpcoming();
-            if (!Busy && !polling && heartTask == null && plugin.Settings.PrefetchSongs.Value > 0)
-                plugin.Aggregate.Prefetch(upcoming, plugin.Settings.AggregateBitrate.Value);
+            if (current != null) plugin.Aggregate.SetRepeat(RepeatCurrent(current));
+            plugin.Aggregate.Prefetch(upcoming, plugin.Settings.AggregateBitrate.Value,
+                !Busy && !polling && heartTask == null && plugin.Settings.PrefetchSongs.Value > 0);
             if (closedAt >= 0f && Time.unscaledTime - closedAt >= CacheLifetime)
             {
                 closedAt = -1f;
@@ -513,9 +550,12 @@ internal sealed partial class MuoniumHub : IDisposable
 			chartTask = null;
 			try
 			{
-				rows = chartLoad.GetAwaiter().GetResult();
-				InvalidateTrackCache();
-				message = "QQ 音乐榜单已加载";
+				var tracks = chartLoad.GetAwaiter().GetResult();
+				if (page == ChartPage && platform == 1)
+				{
+					rows = tracks;
+					message = "QQ 音乐榜单已加载";
+				}
 			}
 			catch (Exception error)
 			{
@@ -529,7 +569,7 @@ internal sealed partial class MuoniumHub : IDisposable
 			try
 			{
 				recRows = recLoad.GetAwaiter().GetResult();
-				recOffset = 0;
+				recPage = 0;
 				recNote = ((recRows.Length == 0) ? "这个账号今天暂时没有推荐" : "");
 			}
 			catch (Exception error)
@@ -566,6 +606,20 @@ internal sealed partial class MuoniumHub : IDisposable
                     StoreCatalogue(pendingCacheKey, result);
                 if (finishedOp is "restore" or "logout" or "loginCookie" || (string?)result["state"] == "CONFIRMED")
                     InvalidateAccountCaches(finishedSource);
+				if (finishedOp == "library" && finishedSource == "kugou")
+				{
+					kugouLibraryError = (string?)result["libraryError"];
+					if (result["playlists"] is JArray)
+					{
+						kugouNeedsLogin = false;
+						loggedIn = true;
+					}
+					else if ((bool?)result["needsLogin"] == true)
+					{
+						kugouNeedsLogin = true;
+						loggedIn = false;
+					}
+				}
 				if (finishedOp == "restore")
 				{
 					message = "登录态已导入，正在校验…";
@@ -574,10 +628,12 @@ internal sealed partial class MuoniumHub : IDisposable
 				JToken val = result["tracks"];
 				JArray val2 = (JArray)(object)((val is JArray) ? val : null);
 				if (val2 != null && (finishedOp != "playlist" ||
-                    (page == requestPage && (requestPage != PlaylistPage || playlistId == detailId))))
+                    (page == requestPage && Source == finishedSource &&
+                        (requestPage == PlaylistPage ? playlistId == detailId :
+                            requestPage == ChartPage && chartIndex >= 0 && ChartIds[chartIndex] == detailId))))
 				{
-					rows = ParseTracks(val2);
-					InvalidateTrackCache();
+					if (finishedOp == "search") searchRows = ParseTracks(val2);
+					else rows = ParseTracks(val2);
 				}
 				JToken val3 = result["playlists"];
 				JArray val4 = (JArray)(object)((val3 is JArray) ? val3 : null);
@@ -627,7 +683,7 @@ internal sealed partial class MuoniumHub : IDisposable
 				}
 				else if (result["loggedIn"] != null)
 				{
-					loggedIn = (bool)result["loggedIn"];
+					loggedIn = (bool)result["loggedIn"] && (finishedSource != "kugou" || !kugouNeedsLogin);
 					accountName = (loggedIn ? (((string)result["name"]) ?? "已登录") : "未登录");
 					accountAvatar = (loggedIn ? (((string)result["avatar"]) ?? "") : "");
 					accountId = (loggedIn ? (((string)result["userId"]) ?? "") : "");
@@ -646,6 +702,8 @@ internal sealed partial class MuoniumHub : IDisposable
 			{
 				polling = false;
 				message = DiagnosticLog.Report("Muonium音乐", pendingOp, error, "MuoniumHub.cs", 137);
+				if (pendingOp == "library" && pendingSource == "kugou")
+					kugouLibraryError = "酷狗歌单请求失败，请检查网络后重试。";
 			}
 		}
 		if (polling && !Busy && Time.unscaledTime >= pollAt)
@@ -773,7 +831,7 @@ internal sealed partial class MuoniumHub : IDisposable
         closedAt = -1f;
         if (!catalogueExpired) return;
         catalogueExpired = false;
-        if (page == SearchPage && !string.IsNullOrWhiteSpace(query) && !Busy) DoSearch();
+        if (page == SearchPage && searchQuery.Length != 0 && !SearchBusy) DoSearch();
     }
     internal void WindowClosed() => closedAt = Time.unscaledTime;
 
@@ -788,6 +846,7 @@ internal sealed partial class MuoniumHub : IDisposable
         libraryPlaylists = Array.Empty<JObject>();
         playlists = Array.Empty<JObject>();
         rows = Array.Empty<GdMusicApi.Track>();
+        searchRows = Array.Empty<GdMusicApi.Track>();
         plugin.Aggregate.ClearSearchResults();
         InvalidateTrackCache();
         discoverKey = libKey = recKey = "";
@@ -818,6 +877,11 @@ internal sealed partial class MuoniumHub : IDisposable
     internal void InvalidateAccountCaches(string source)
     {
         if (source == "ncm" && playMode == HeartMode) ChangePlaybackMode(OrderedMode);
+        if (source == "kugou")
+        {
+            kugouLibraryError = null;
+            kugouNeedsLogin = false;
+        }
         foreach (string key in catalogueCache.Keys.Where(key => key.StartsWith(source + "|", StringComparison.Ordinal)).ToArray())
             catalogueCache.Remove(key);
         plugin.Aggregate.InvalidateSource(source);
@@ -898,8 +962,12 @@ internal sealed partial class MuoniumHub : IDisposable
 				queueIndex = -1;
 			}
 		}
-        plugin.Aggregate.Play(track, plugin.Settings.AggregateBitrate.Value);
+        plugin.Aggregate.Play(track, plugin.Settings.AggregateBitrate.Value, RepeatCurrent(track));
     }
+
+    private bool RepeatCurrent(GdMusicApi.Track track) =>
+        playMode == RepeatOneMode || (playMode != HeartMode &&
+            (library.Queue.Count <= 1 || !library.Queue.Any(item => item.Source == track.Source && item.Id == track.Id)));
 
 	private void Started(GdMusicApi.Track track)
 	{
@@ -1063,7 +1131,21 @@ internal sealed partial class MuoniumHub : IDisposable
 		GUILayout.Space(16f);
 		GUILayout.BeginVertical(new GUILayoutOption[1] { GUILayout.Width(num3) });
 		Header(num3);
-		scroll = GUILayout.BeginScrollView(scroll, false, false, GUIStyle.none, GUIStyle.none, new GUILayoutOption[2] { GUILayout.Width(num3), GUILayout.Height(Mathf.Max(120f, num2 - 96f)) });
+		int trackCount = page switch
+		{
+			0 when platform == 0 => recRows.Length,
+			3 => favoritesView.Length,
+			4 => historyView.Length,
+			5 => queueView.Length,
+			SearchPage => SearchResults.Length,
+			ChartPage or PlaylistPage => rows.Length,
+			_ => 0
+		};
+		bool remoteSearch = page == SearchPage && platform != 5 && searchQuery.Length > 0;
+		bool showTrackPager = remoteSearch || trackCount > 0;
+		float scrollHeight = num2 - 96f - (showTrackPager ? TrackPagerHeight : 0f);
+		scroll = GUILayout.BeginScrollView(scroll, false, false, GUIStyle.none, GUIStyle.none,
+			GUILayout.Width(num3), GUILayout.Height(scrollHeight));
 		try
 		{
 			GUILayout.Space(14f);
@@ -1110,13 +1192,15 @@ internal sealed partial class MuoniumHub : IDisposable
 				break;
 			}
 			GUILayout.Space(12f);
-			GUILayout.Label(message, messageStyle, new GUILayoutOption[1] { GUILayout.Height(22f) });
+			if (page != 2 || platform != 3 || message != kugouLibraryError)
+				GUILayout.Label(message, messageStyle, new GUILayoutOption[1] { GUILayout.Height(22f) });
 		}
 		catch (Exception error)
 		{
 			message = DiagnosticLog.Report("Muonium音乐", "绘制内容", error, "MuoniumHub.cs", 236);
 		}
 		GUILayout.EndScrollView();
+		if (showTrackPager) DrawTrackFooter(trackCount, remoteSearch);
 		GUILayout.EndVertical();
 		GUILayout.EndHorizontal();
 		Transport(width);
@@ -1174,6 +1258,7 @@ internal sealed partial class MuoniumHub : IDisposable
 			GUI.Label(labelRect, Pages[i], val2);
 			if (UiKit.Click(rect2))
 			{
+				if (page != i) trackPage = 0;
 				page = i;
 				scroll = Vector2.zero;
 			}
@@ -1252,6 +1337,7 @@ internal sealed partial class MuoniumHub : IDisposable
 				if (UiKit.Pill(new Rect(num3 + (float)i * (num + 5f), num4, num, 34f), style: center, label: array[i], active: platform == i, hoverable: enabled))
 				{
 					platform = i;
+					trackPage = 0;
 					chartTask = null;
 					if (page == ChartPage)
 					{
@@ -1266,7 +1352,8 @@ internal sealed partial class MuoniumHub : IDisposable
 					}
 					polling = false;
 					ClearQr();
-					rows = Array.Empty<GdMusicApi.Track>();
+					if (page != ChartPage) rows = Array.Empty<GdMusicApi.Track>();
+					searchRows = Array.Empty<GdMusicApi.Track>();
 					InvalidateTrackCache();
 					playlists = Array.Empty<JObject>();
 					playlistRows.Clear();
@@ -1277,7 +1364,7 @@ internal sealed partial class MuoniumHub : IDisposable
 					recTask = null;
 					recKey = "";
 					recNote = "";
-					recOffset = 0;
+					recPage = 0;
 					message = "已切换平台";
 					loggedIn = false;
 					accountName = "未登录";
@@ -1315,7 +1402,7 @@ internal sealed partial class MuoniumHub : IDisposable
 		Rect rect4 = new Rect(rect.x, rect.y + 46f, Mathf.Max(160f, width - 104f), 38f);
 		bool flag = UiKit.Hover(rect4);
 		UiKit.Round(new Rect(rect4.x - 2f, rect4.y - 2f, rect4.width + 4f, rect4.height + 4f), UiKit.Glass(flag ? 0.22f : 0.14f), 13);
-		UiKit.Round(rect4, FieldFill, 11);
+		UiKit.Round(rect4, UiKit.HasCustomTheme ? UiKit.GlassLift(flag ? 0.86f : 0.72f) : FieldFill, 11);
 		if (searchField == null)
 		{
 			searchField = new GUIStyle(GUI.skin.textField)
@@ -1362,8 +1449,9 @@ internal sealed partial class MuoniumHub : IDisposable
 		GUI.Label(searchRect, "搜索", searchLabel);
 		bool flag2 = UiKit.Click(searchRect);
 		bool flag3 = (int)Event.current.type == 4 && ((int)Event.current.keyCode == 13 || (int)Event.current.keyCode == 271) && GUI.GetNameOfFocusedControl() == "muonium-search";
-		if (flag2 | flag3)
+		if ((flag2 || flag3) && !SearchBusy)
 		{
+			searchQuery = query.Trim();
 			searchPage = 1;
 			DoSearch();
 			if ((int)Event.current.type == 4)
@@ -1374,10 +1462,10 @@ internal sealed partial class MuoniumHub : IDisposable
 		UiKit.Fill(new Rect(rect.x, rect.yMax - 1f, width, 1f), UiKit.Divider);
 	}
 
-	private bool ActionButton(string label, float width = 0f)
+	private bool ActionButton(string label, float width = 0f, bool available = true)
 	{
 		bool enabled = GUI.enabled;
-		GUI.enabled = enabled && !Busy;
+		GUI.enabled = enabled && !Busy && available;
 		bool result = ((width > 0f) ? GUILayout.Button(label, card, new GUILayoutOption[2]
 		{
 			GUILayout.Width(width),
@@ -1507,22 +1595,6 @@ internal sealed partial class MuoniumHub : IDisposable
 			? "听歌推荐已更新，点卡片直接播放"
 			: "读取你网易云账号的听歌习惯，点卡片直接播";
 		GUI.Label(new Rect(rect.x, rect.y + 24f, num - 200f, 18f), subtitle, guiStyle2);
-		if (recRows.Length > 12)
-		{
-			Rect rect3 = new Rect(rect.x + num - 30f, rect.y + 4f, 26f, 28f);
-			bool flag2 = UiKit.Hover(rect3);
-			UiKit.Chip(rect3, flag2 ? 0.68f : 0.4f, 14);
-			GUIStyle guiStyle4 = new GUIStyle(center)
-			{
-				fontSize = 13
-			};
-			guiStyle4.normal.textColor = UiKit.Ink;
-			GUI.Label(rect3, "›", guiStyle4);
-			if (UiKit.Click(rect3))
-			{
-				recOffset += 12;
-			}
-		}
 		GUIStyle guiStyle5 = new GUIStyle(GUI.skin.label)
 		{
 			fontSize = 11,
@@ -1555,18 +1627,19 @@ internal sealed partial class MuoniumHub : IDisposable
 			GUI.Label(new Rect(rect4.x, rect4.y + 6f, num, 36f), text, guiStyle5);
 			return;
 		}
+		int index = Mathf.Clamp(recPage, 0, PageCount(recRows.Length) - 1);
+		int start = index * TrackPageSize;
+		int rowCount = Math.Min(TrackPageSize, recRows.Length - start);
 		float num2 = 12f;
 		float num3 = (num - num2 * 3f) / 4f;
 		float num4 = 64f;
-		float num5 = num4 * 3f + num2 * 2f;
+		int gridRows = (rowCount + 3) / 4;
+		float num5 = num4 * gridRows + num2 * (gridRows - 1);
 		Rect rect5 = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none, new GUILayoutOption[2]
 		{
 			GUILayout.Width(num),
 			GUILayout.Height(num5)
 		});
-		int num6 = recRows.Length;
-		int num7 = (((recOffset % num6) + num6) % num6);
-		int num8 = Math.Min(12, num6);
 		GUIStyle guiStyle6 = new GUIStyle(GUI.skin.label)
 		{
 			fontSize = 12,
@@ -1585,12 +1658,12 @@ internal sealed partial class MuoniumHub : IDisposable
 			clipping = (TextClipping)2
 		};
 		guiStyle7.normal.textColor = UiKit.Muted;
-		for (int i = 0; i < num8; i++)
+		for (int i = 0; i < rowCount; i++)
 		{
 			int num9 = i / 4;
 			int num10 = i % 4;
 			Rect rect6 = new Rect(rect5.x + (num3 + num2) * (float)num10, rect5.y + (num4 + num2) * (float)num9, num3, num4);
-			GdMusicApi.Track track = recRows[(num7 + i) % num6];
+			GdMusicApi.Track track = recRows[start + i];
 			bool flag3 = UiKit.Hover(rect6);
 			bool flag4 = current != null && PlayerLibrary.Key(current) == PlayerLibrary.Key(track);
 			UiKit.Chip(rect6, flag4 ? 0.52f : (flag3 ? 0.42f : 0.26f), 18);
@@ -1646,13 +1719,12 @@ internal sealed partial class MuoniumHub : IDisposable
             }
             ChangePlaybackMode(OrderedMode);
         }
+		int queueStart = num / 200 * 200;
 		library.Queue.Clear();
-		library.Queue.AddRange((list.Length > 200) ? list[0..200] : list);
+		library.Queue.AddRange(list.Skip(queueStart).Take(200));
 		library.Touch();
-		queueIndex = Mathf.Min(num, library.Queue.Count - 1);
-		rows = list;
-		InvalidateTrackCache();
-		Play(list[queueIndex]);
+		queueIndex = num - queueStart;
+		Play(list[num]);
 	}
 
 	private void PlayRecommend(GdMusicApi.Track track)
@@ -1725,6 +1797,8 @@ internal sealed partial class MuoniumHub : IDisposable
 		chartIndex = index;
 		chartRetried = false;
 		page = ChartPage;
+		trackPage = 0;
+		scroll = Vector2.zero;
 		rows = Array.Empty<GdMusicApi.Track>();
 		InvalidateTrackCache();
 		chartTask = null;
@@ -1735,7 +1809,7 @@ internal sealed partial class MuoniumHub : IDisposable
 		}
 		if (platform == 1)
 		{
-			chartTask = QqChart.Load(QqChartIds[index], 100);
+			chartTask = QqChart.Load(QqChartIds[index]);
 			message = "正在拉取 QQ 音乐榜单…";
 			return;
 		}
@@ -1779,7 +1853,7 @@ internal sealed partial class MuoniumHub : IDisposable
 			if (rows.Length == 0 && chartTask == null && !chartRetried)
 			{
 				chartRetried = true;
-				chartTask = QqChart.Load(QqChartIds[chartIndex], 100);
+				chartTask = QqChart.Load(QqChartIds[chartIndex]);
 			}
 		}
 		else if (rows.Length == 0 && !Busy && !chartRetried)
@@ -1799,56 +1873,39 @@ internal sealed partial class MuoniumHub : IDisposable
 	}
 	private void Search()
 	{
-		if (query.Trim().Length == 0)
+		if (searchQuery.Length == 0)
 		{
 			EmptyState("还没有搜索", "在上方搜索框输入歌名或歌手，回车或点搜索");
 			return;
 		}
-		GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-		if (ActionButton("上一页", 96f) && searchPage > 1)
-		{
-			searchPage--;
-			DoSearch();
-		}
-		GUILayout.Space(8f);
-		if (ActionButton("下一页", 96f))
-		{
-			searchPage++;
-			DoSearch();
-		}
-		GUILayout.Space(12f);
-		GUILayout.Label("第 " + searchPage + " 页", small, Array.Empty<GUILayoutOption>());
-		GUILayout.FlexibleSpace();
-		Rect rect = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none, new GUILayoutOption[2]
-		{
-			GUILayout.Width(108f),
-			GUILayout.Height(30f)
-		});
-		PlayAllChip(rect, (platform == 2) ? plugin.Aggregate.Results : rows);
-		GUILayout.EndHorizontal();
-		GUILayout.Space(16f);
-		TrackRows((platform == 2) ? plugin.Aggregate.Results : rows, "", null);
+		TrackRows(SearchResults, "搜索结果", null, paginate: platform == 5);
 	}
+
+	private GdMusicApi.Track[] SearchResults => platform == 2 ? plugin.Aggregate.Results : searchRows;
+
+	private bool SearchBusy => Busy || (platform == 2 && plugin.Aggregate.SearchPending);
 
 	private void DoSearch()
 	{
-		if (query.Trim().Length == 0)
+		if (searchQuery.Length == 0)
 		{
 			message = "请输入歌名或歌手";
 			return;
 		}
 		page = SearchPage;
+		trackPage = 0;
 		scroll = Vector2.zero;
 		if (platform == 2)
 		{
 			Activate();
-			plugin.Aggregate.Search(Source, query, searchPage);
+			plugin.Aggregate.Search(Source, searchQuery, searchPage);
 		}
 		else
 		{
+			searchRows = Array.Empty<GdMusicApi.Track>();
 			Request("search", Source, new JObject
 			{
-				["query"] = (JToken)(query),
+				["query"] = (JToken)(searchQuery),
 				["page"] = (JToken)(searchPage)
 			});
 		}
@@ -1899,7 +1956,12 @@ internal sealed partial class MuoniumHub : IDisposable
 	{
         if(platform>=4){
             SectionHeader("打开歌单", platform==5?"输入 YouTube 歌单 ID 或链接":"哔哩哔哩收藏夹尚未适配，请使用搜索");
-            if(platform==5){manualPlaylist=GUILayout.TextField(manualPlaylist, 2048);if(ActionButton("打开歌单",140f)&&!string.IsNullOrWhiteSpace(manualPlaylist))Request("playlist",Source,new JObject{["playlistId"]=manualPlaylist});if(rows.Length>0)TrackRows(rows,"",null);}
+            if (platform == 5)
+            {
+                manualPlaylist = GUILayout.TextField(manualPlaylist, 2048);
+                if (ActionButton("打开歌单", 140f, !string.IsNullOrWhiteSpace(manualPlaylist)))
+                    OpenPlaylist(manualPlaylist.Trim(), "YouTube 歌单");
+            }
             return;
         }
 		if (platform == 2)
@@ -1914,6 +1976,28 @@ internal sealed partial class MuoniumHub : IDisposable
 			libraryPlaylists = Array.Empty<JObject>();
 			RebuildLibraryRows();
 			Request("library", Source);
+		}
+		if (platform == 3)
+		{
+			bool loading = Busy && pendingOp == "library";
+			if (ActionButton("重新加载我的歌单", 200f))
+				Request("library", Source, refresh: true);
+			if (libraryRows.Count == 0)
+			{
+				if (loading)
+					EmptyState("正在加载酷狗歌单", "请稍候");
+				else if (kugouLibraryError != null)
+					EmptyState("酷狗歌单加载失败", kugouLibraryError);
+				else if (!Busy)
+					EmptyState("暂无酷狗歌单", "这个账号目前没有可显示的云端歌单。");
+			}
+			else
+			{
+				if (loading) Hint("正在刷新酷狗歌单…");
+				else if (kugouLibraryError != null) Hint(kugouLibraryError);
+				PlaylistRows(libraryRows, ref libraryPage);
+			}
+			return;
 		}
 		if (libraryRows.Count == 0)
 		{
@@ -1939,6 +2023,7 @@ internal sealed partial class MuoniumHub : IDisposable
 		if (flag)
 		{
 			page = playlistOrigin;
+			scroll = Vector2.zero;
 			return;
 		}
 		GUILayout.Space(8f);
@@ -2090,21 +2175,26 @@ internal sealed partial class MuoniumHub : IDisposable
 			};
 			val5.normal.textColor = UiKit.Faint;
 			GUI.Label(new Rect(rect3.x + 2f, val.yMax + 28f, rect3.width - 4f, 16f), (playlistRow.Count > 0) ? (playlistRow.Count + " 首曲目") : "歌单", val5);
-			if (UiKit.Click(rect3))
+			if (!Busy && UiKit.Click(rect3))
 			{
-				playlistId = playlistRow.Id;
-				playlistTitle = playlistRow.Name;
-				playlistOrigin = page;
-				playlistRetried = false;
-				page = PlaylistPage;
-				scroll = Vector2.zero;
-				rows = Array.Empty<GdMusicApi.Track>();
-				InvalidateTrackCache();
-				Request("playlist", Source, new JObject { ["playlistId"] = (JToken)(playlistRow.Id) });
+				OpenPlaylist(playlistRow.Id, playlistRow.Name);
 			}
 		}
 		GUILayout.Space(120f);
 		lastScrollY = scroll.y;
+	}
+
+	private void OpenPlaylist(string id, string title)
+	{
+		playlistId = id;
+		playlistTitle = title;
+		playlistOrigin = page;
+		playlistRetried = false;
+		page = PlaylistPage;
+		trackPage = 0;
+		scroll = Vector2.zero;
+		rows = Array.Empty<GdMusicApi.Track>();
+		Request("playlist", Source, new JObject { ["playlistId"] = id });
 	}
 
 	private void Queue()
@@ -2174,6 +2264,20 @@ internal sealed partial class MuoniumHub : IDisposable
 		return snapped;
 	}
 
+	private void DrawCameraBinding(string label, Plugin.CameraBinding action, ConfigEntry<Key> binding)
+	{
+		bool recording = plugin.RecordingCameraBinding == action;
+		GUILayout.BeginHorizontal();
+		if (ActionButton(recording ? label + " · 请按键" : label + " · " + Plugin.CameraKeyName(binding.Value), 194f))
+			plugin.RecordingCameraBinding = recording ? Plugin.CameraBinding.None : action;
+		if (ActionButton("清空按键", 104f))
+		{
+			binding.Value = Key.None;
+			if (recording) plugin.RecordingCameraBinding = Plugin.CameraBinding.None;
+		}
+		GUILayout.EndHorizontal();
+	}
+
 	private void Diagnostics()
     {
         SectionHeader("角色视角", "进入地图时使用第一人称。第二人称从角色前方回看，第三人称从背后跟随。");
@@ -2186,25 +2290,18 @@ internal sealed partial class MuoniumHub : IDisposable
         }
         GUILayout.EndHorizontal();
         GUILayout.Space(8f);
-        GUILayout.BeginHorizontal();
-        string binding = plugin.CapturingPerspectiveKey ? "请按下新的按键" : "切换键 · " + plugin.PerspectiveKeyName;
-        if (ActionButton(binding, 160f))
-            plugin.CapturingPerspectiveKey = !plugin.CapturingPerspectiveKey;
-        if (ActionButton("清空按键", 104f))
-        {
-            plugin.Settings.PerspectiveKey.Value = UnityEngine.InputSystem.Key.None;
-            plugin.CapturingPerspectiveKey = false;
-        }
-        GUILayout.EndHorizontal();
-        if (plugin.CapturingPerspectiveKey)
-            Hint("Esc 取消录入。右 Shift 和反斜杠已用于播放器。");
+        DrawCameraBinding("视角切换键", Plugin.CameraBinding.Perspective, plugin.Settings.PerspectiveKey);
+        DrawCameraBinding("运镜快捷键", Plugin.CameraBinding.Cinematic, plugin.Settings.CinematicKey);
+        if (plugin.RecordingCameraBinding != Plugin.CameraBinding.None)
+            Hint("Esc 取消录入。请选择与播放器、另一项视角绑定和游戏操作分开的按键。");
+        Hint("地图内按运镜快捷键进入或退出。移动鼠标、使用其他按键或操作手柄也可退出。");
         GUILayout.Space(12f);
-        if (ActionButton(plugin.Settings.IdleCameraEnabled.Value ? "闲置运镜 · 已开启" : "闲置运镜 · 已关闭", 160f))
+        if (ActionButton(plugin.Settings.IdleCameraEnabled.Value ? "自动运镜 · 已开启" : "自动运镜 · 已关闭", 160f))
             plugin.Settings.IdleCameraEnabled.Value = !plugin.Settings.IdleCameraEnabled.Value;
         if (plugin.Settings.IdleCameraEnabled.Value)
         {
             plugin.Settings.IdleCameraSeconds.Value = (int)MiniSlider("等待秒数", plugin.Settings.IdleCameraSeconds.Value, 10, 180, 1);
-            Hint("按设定时间连续无操作后开始运镜。移动鼠标、按键或操作手柄即可恢复当前视角。");
+            Hint("连续无操作达到设定时间后自动进入运镜。");
             Hint("打开设置前的运镜状态 · " + plugin.Perspective.IdleStatus);
         }
         GUILayout.Space(18f);
@@ -2216,8 +2313,11 @@ internal sealed partial class MuoniumHub : IDisposable
         plugin.Settings.CacheMinutes.Value = (int)MiniSlider("保留分钟", plugin.Settings.CacheMinutes.Value, 1, 60, 1);
         plugin.Settings.PrefetchSongs.Value = (int)MiniSlider("预缓存首数", plugin.Settings.PrefetchSongs.Value, 0, 6, 1);
         GUILayout.Space(18f);
-		SectionHeader("界面颜色", "调色盘选的颜色会应用到强调色、悬停高亮和玻璃卡片底色；留空是默认玻璃白。");
-		ThemePicker.Draw(plugin, contentWidth);
+		SectionHeader("界面颜色", "拖动调色盘或输入色号，即时预览并自动保存。");
+		ThemePicker.Draw(plugin);
+		GUILayout.Space(18f);
+		SectionHeader("界面字色", "默认随底色切换深浅，也可以单独设置。");
+		ThemePicker.DrawInterfaceText(plugin);
 		GUILayout.Space(18f);
 		SectionHeader("小窗播放器位置", "水平百分比 0 最左、50 居中、100 最右；垂直位置从屏幕顶部计。");
 		float posX = MiniSlider("水平 %", plugin.Settings.MiniX.Value, 0f, 100f, 1f);
@@ -2238,7 +2338,7 @@ internal sealed partial class MuoniumHub : IDisposable
 			plugin.Settings.MiniY.Value = 14f;
 		}
 		GUILayout.Space(18f);
-		SectionHeader("环境音效融合", "刮风、下雨、暴雪起来时把音乐压低、变闷，环境过去自己淡回来。");
+		SectionHeader("环境音效融合", "天气、迷雾、水下、狭窄地形、反重力和地图混响区会改变音乐听感，离开后逐渐恢复。");
 		Rect rectMix = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none, new GUILayoutOption[3]
 		{
 			GUILayout.MinWidth(0f),
@@ -2254,7 +2354,8 @@ internal sealed partial class MuoniumHub : IDisposable
 			plugin.Settings.AmbienceMix.Value = !mixOn;
 		}
 		GUILayout.Space(10f);
-		Hint("检测状态：" + AmbienceMix.StatusText + " · 天气：" + AmbienceMix.KindText + " · 音乐保留 " + Mathf.RoundToInt(AmbienceMix.MusicScale * 100f) + "%" + (AmbienceMix.Indoor > 0.5f ? " · 已躲进室内/遮蔽" : ""));
+		if (mixOn)
+			Hint("检测状态：" + AmbienceMix.StatusText + " · 当前环境：" + AmbienceMix.KindText + " · 音乐保留 " + Mathf.RoundToInt(AmbienceMix.MusicScale * 100f) + "%");
 		GUILayout.Space(8f);
 		SectionHeader("播放器线路", "YouTube 与哔哩哔哩需要本机 FFmpeg 或专用代理。");
         GUILayout.Label("FFmpeg 路径（可留空自动检测）",muted);
@@ -2349,7 +2450,7 @@ internal sealed partial class MuoniumHub : IDisposable
 			GUILayout.EndHorizontal();
 			GUILayout.Space(gap);
 		}
-		GUILayout.Label("作者的话：感谢三位老师的鼎力相助，同时也要感谢茉莉出击 - 锦鲤 - JY - 言非...等用户的大力支持，以及各位的使用和反馈，希望悬浮歌词能给大家带来不一样的爬山旅程。", authorNoteStyle,
+		GUILayout.Label("作者的话：感谢三位老师的鼎力相助，同时也要感谢茉莉出击 - 锦鲤 - JY - 言非...等用户的大力支持，以及各位的使用和反馈，希望悬浮歌词能给大家带来不一样的爬山旅程。\n本模组完全免费开源，不存在任何支付购买渠道！", authorNoteStyle,
 			GUILayout.Width(contentWidth));
 	}
 
@@ -2439,7 +2540,47 @@ internal sealed partial class MuoniumHub : IDisposable
 		GUI.Label(new Rect(rect.x, rect.y + 52f, rect.width, 20f), hint, val2);
 	}
 
-	private void TrackRows(GdMusicApi.Track[] tracks, string title, string? hint)
+	private static int PageCount(int count) => count == 0 ? 1 : (count - 1) / TrackPageSize + 1;
+
+	private int PageButtons(int index, string label, bool hasPrevious, bool hasNext)
+	{
+		float buttonWidth = contentWidth < 480f ? 54f : 96f;
+		bool previous = ActionButton("上一页", buttonWidth, hasPrevious);
+		GUILayout.Label(label, center, GUILayout.Width(160f), GUILayout.Height(44f));
+		bool next = ActionButton("下一页", buttonWidth, hasNext);
+		return index + (next ? 1 : previous ? -1 : 0);
+	}
+
+	private void DrawTrackFooter(int trackCount, bool remoteSearch)
+	{
+		Rect divider = GUILayoutUtility.GetRect(contentWidth, 1f);
+		UiKit.Fill(divider, UiKit.Divider);
+		GUILayout.BeginHorizontal(GUILayout.Height(48f));
+		GUILayout.FlexibleSpace();
+		if (remoteSearch)
+		{
+			int next = PageButtons(searchPage, $"第 {searchPage} 页 · {trackCount} 首",
+				!SearchBusy && searchPage > 1, !SearchBusy && trackCount > 0);
+			if (next != searchPage)
+			{
+				searchPage = next;
+				DoSearch();
+			}
+		}
+		else
+		{
+			ref int cursor = ref (page == 0 ? ref recPage : ref trackPage);
+			int pageCount = PageCount(trackCount);
+			int index = Mathf.Clamp(cursor, 0, pageCount - 1);
+			cursor = PageButtons(index, $"第 {index + 1} / {pageCount} 页 · {trackCount} 首",
+				index > 0, index + 1 < pageCount);
+			if (cursor != index && page != 0) scroll = Vector2.zero;
+		}
+		GUILayout.FlexibleSpace();
+		GUILayout.EndHorizontal();
+	}
+
+	private void TrackRows(GdMusicApi.Track[] tracks, string title, string? hint, bool paginate = true)
 	{
 		if (title.Length > 0)
 		{
@@ -2456,7 +2597,9 @@ internal sealed partial class MuoniumHub : IDisposable
 			EmptyState("还没有歌曲", "搜索歌曲、打开歌单，或把喜欢的曲目加入队列");
 			return;
 		}
-		int num = Math.Min(tracks.Length, 60);
+		int index = paginate ? Mathf.Clamp(trackPage, 0, PageCount(tracks.Length) - 1) : 0;
+		int start = index * TrackPageSize;
+		int num = paginate ? Math.Min(tracks.Length - start, TrackPageSize) : tracks.Length;
 		float num2 = 76f;
 		Rect rect = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none, new GUILayoutOption[3]
 		{
@@ -2465,10 +2608,10 @@ internal sealed partial class MuoniumHub : IDisposable
 			GUILayout.Height((float)num * num2)
 		});
 		float num3 = Mathf.Max(120f, rect.width - 78f - 62f - 12f);
-		RebuildTrackCache(tracks, num, num3);
+		RebuildTrackCache(tracks, start, num, num3);
 		for (int i = 0; i < num; i++)
 		{
-			GdMusicApi.Track track = tracks[i];
+			GdMusicApi.Track track = tracks[start + i];
 			float num4 = rect.y + (float)i * num2;
 			Rect rect2 = new Rect(rect.x, num4, rect.width, 70f);
 			Rect rect3 = new Rect(rect.x, num4, num3, 70f);
@@ -2538,13 +2681,8 @@ internal sealed partial class MuoniumHub : IDisposable
 			}
 			else if (UiKit.Click(rect3))
 			{
-				PlayFromList(tracks, i);
+				PlayFromList(tracks, start + i);
 			}
-		}
-		if (tracks.Length > 60)
-		{
-			GUILayout.Space(6f);
-			GUILayout.Label("已显示前 " + 60 + " 首；用搜索分页查看其余结果", muted, Array.Empty<GUILayoutOption>());
 		}
 	}
 
@@ -2568,18 +2706,20 @@ internal sealed partial class MuoniumHub : IDisposable
 		return "";
 	}
 
-	private void RebuildTrackCache(GdMusicApi.Track[] tracks, int count, float width)
+	private void RebuildTrackCache(GdMusicApi.Track[] tracks, int start, int count, float width)
 	{
-		if (cachedTracks != tracks || cachedCount != count || !(Mathf.Abs(cachedLabelWidth - width) < 0.5f) || cachedLibraryVersion != library.Version)
+		if (cachedTracks != tracks || cachedTrackStart != start || cachedCount != count ||
+			!(Mathf.Abs(cachedLabelWidth - width) < 0.5f) || cachedLibraryVersion != library.Version)
 		{
 			cachedTracks = tracks;
+			cachedTrackStart = start;
 			cachedCount = count;
 			cachedLabelWidth = width;
 			cachedLibraryVersion = library.Version;
 			trackLabels.Clear();
 			for (int i = 0; i < count; i++)
 			{
-				trackLabels.Add(TrackLabel(tracks[i], width));
+				trackLabels.Add(TrackLabel(tracks[start + i], width));
 			}
 		}
 	}
@@ -2796,7 +2936,7 @@ internal sealed partial class MuoniumHub : IDisposable
         Styles();
         int radius=(int)Mathf.Min(area.height*0.5f,26f);
         UiKit.Shadow(new Rect(area.x,area.y,area.width,area.height),radius,1f);
-        UiKit.Round(area,UiKit.Glass(0.92f),radius);
+        UiKit.Round(area,UiKit.Glass(UiKit.HasCustomTheme ? 0.78f : 0.92f),radius);
         Rect cover=new Rect(area.x+10,area.y+(area.height-42f)*0.5f,42,42);
         var texture=current!=null?CoverCache.For(current.Cover,42):null;
         UiKit.Round(cover,UiKit.GlassLift(0.55f),12);
@@ -2894,12 +3034,15 @@ internal sealed partial class MuoniumHub : IDisposable
 		plugin.Settings.AggregateVolume.Value = DrawSlider(new Rect(val7.x + 42f, val7.y + 2f, val7.width - 42f, 24f), plugin.Settings.AggregateVolume.Value, 5260366, null);
 		if (snapshot.DurationMs > 0)
 		{
-			long num4 = snapshot.PositionMs / 1000;
+			long shownPositionMs = seekDragControl != 0 && GUIUtility.hotControl == seekDragControl
+				? (long)(seekPreview * snapshot.DurationMs)
+				: snapshot.PositionMs;
+			long num4 = shownPositionMs / 1000;
 			long num5 = snapshot.DurationMs / 1000;
 			if (num4 != cachedPositionSecond)
 			{
 				cachedPositionSecond = num4;
-				cachedPositionText = Clock(snapshot.PositionMs);
+				cachedPositionText = Clock(shownPositionMs);
 			}
 			if (num5 != cachedDurationSecond)
 			{
@@ -2919,10 +3062,7 @@ internal sealed partial class MuoniumHub : IDisposable
 			};
 			GUI.Label(new Rect(val8.xMax - 52f, val8.y + 3f, 52f, 18f), cachedDurationText, val10);
 			float value = (float)snapshot.PositionMs / (float)snapshot.DurationMs;
-			DrawSlider(new Rect(val8.x + 62f, val8.y, val8.width - 124f, 24f), value, 5260367, (float fraction) =>
-			{
-				plugin.Aggregate.Seek(fraction);
-			});
+			DrawSlider(new Rect(val8.x + 62f, val8.y, val8.width - 124f, 24f), value, SeekControlId, plugin.Aggregate.Seek);
 		}
 		else
 		{
@@ -2935,13 +3075,22 @@ internal sealed partial class MuoniumHub : IDisposable
 		}
 	}
 
+	private const int SeekControlId = 5260367;
+	private int seekDragControl;
 	private float seekPreview;
-    internal void CancelSeek(){if(GUIUtility.hotControl==5260367)GUIUtility.hotControl=0;}
+	internal void CancelSeek()
+	{
+		if (seekDragControl != 0 && GUIUtility.hotControl == seekDragControl) GUIUtility.hotControl = 0;
+		seekDragControl = 0;
+	}
 
 	private float DrawSlider(Rect rect, float value, int controlId, Action<float>? onCommit)
 	{
+		bool seeking = onCommit != null;
+		if (seeking) controlId = GUIUtility.GetControlID(controlId, FocusType.Passive, rect);
 		bool flag = GUIUtility.hotControl == controlId;
-		bool flag2 = rect.Contains(Event.current.mousePosition);
+		Rect hitArea = seeking ? new Rect(rect.x - 9f, rect.y, rect.width + 18f, rect.height) : rect;
+		bool flag2 = hitArea.Contains(Event.current.mousePosition);
 		float num = rect.y + rect.height * 0.5f - 4f;
 		Rect rect2 = new Rect(rect.x, num, rect.width, 8f);
 		UiKit.Round(rect2, new Color(0.1f, 0.13f, 0.17f, 0.26f), 4);
@@ -2961,34 +3110,34 @@ internal sealed partial class MuoniumHub : IDisposable
 		UiKit.Circle(rect3, new Color(1f, 1f, 1f, 0.98f));
 		UiKit.Circle(new Rect(rect3.x + 4f, rect3.y + 4f, 10f, 10f), new Color(0.18f, 0.23f, 0.3f, 0.2f));
 		Event val = Event.current;
-		if ((int)val.type == 0 && val.button == 0 && rect.Contains(val.mousePosition))
+		float pointer = val.mousePosition.x - rect2.x;
+		float target = seeking && pointer <= 4f ? 0f : Mathf.Clamp01(pointer / rect2.width);
+		if (val.type == EventType.MouseDown && val.button == 0 && flag2)
 		{
 			GUIUtility.hotControl = controlId;
 			val.Use();
-			float num4 = Mathf.Clamp01((val.mousePosition.x - rect2.x) / rect2.width);
-			if (onCommit != null)
+			if (seeking)
 			{
-				seekPreview = num4;
-				return num4;
+				seekDragControl = controlId;
+				seekPreview = target;
 			}
-			return num4;
+			return target;
 		}
-		if (((int)val.type == 3) & flag)
+		if (val.type == EventType.MouseDrag && flag)
 		{
 			val.Use();
-			float preview = Mathf.Clamp01((val.mousePosition.x - rect2.x) / rect2.width);
-            if(onCommit != null)seekPreview=preview;
-            return preview;
+			if (seeking) seekPreview = target;
+			return target;
 		}
-		if (((int)val.type == 1) & flag)
+		if (flag && val.button == 0 && (val.type == EventType.MouseUp || val.rawType == EventType.MouseUp))
 		{
-			float num5 = Mathf.Clamp01((val.mousePosition.x - rect2.x) / rect2.width);
 			GUIUtility.hotControl = 0;
-			val.Use();
+			if (val.type != EventType.Used) val.Use();
 			if (onCommit != null)
 			{
-				onCommit(num5);
-				return num5;
+				seekDragControl = 0;
+				onCommit(seekPreview);
+				return seekPreview;
 			}
 		}
 		return value;

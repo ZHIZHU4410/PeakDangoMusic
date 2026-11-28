@@ -7,7 +7,7 @@ namespace PeakDangoMusic;
 
 internal static class UiKit
 {
-	internal static readonly Color Ink = new Color(0.043f, 0.05f, 0.062f, 1f);
+	internal static Color Ink => HasCustomTheme || textHex.Length > 0 ? Text : new Color(0.043f, 0.05f, 0.062f, 1f);
 
 	internal static Color Panel = new Color(1f, 1f, 1f, 0.22f);
 
@@ -25,11 +25,11 @@ internal static class UiKit
 
 	internal static Color AccentSoft = new Color(0.17f, 0.38f, 0.42f, 1f);
 
-	internal static readonly Color Text = new Color(0.09f, 0.11f, 0.15f, 1f);
+	internal static Color Text = new Color(0.09f, 0.11f, 0.15f, 1f);
 
-	internal static readonly Color Muted = new Color(0.32f, 0.37f, 0.44f, 1f);
+	internal static Color Muted = new Color(0.32f, 0.37f, 0.44f, 1f);
 
-	internal static readonly Color Faint = new Color(0.5f, 0.55f, 0.62f, 1f);
+	internal static Color Faint = new Color(0.5f, 0.55f, 0.62f, 1f);
 
 	internal static readonly Color Ok = new Color(0.44f, 0.84f, 0.61f, 1f);
 
@@ -42,10 +42,15 @@ internal static class UiKit
 	internal static Color WindowTint = new Color(0.9f, 0.93f, 0.97f);
 
 	internal static int ThemeVersion;
+	internal static bool HasCustomTheme { get; private set; }
+	internal static bool DarkSurface { get; private set; }
 
 	private static string themeHex = "\u0000";
+	private static string textHex = "";
 
 	private static readonly Dictionary<string, Texture2D> boxes = new Dictionary<string, Texture2D>();
+
+	private static readonly Dictionary<(int Radius, int Width, int Height), GUIStyle> glassReflections = new();
 
 	private static readonly Dictionary<string, Texture2D> circles = new Dictionary<string, Texture2D>();
 
@@ -74,9 +79,33 @@ internal static class UiKit
 
 	private static readonly Color AccentDeepDefault = new Color(0.12f, 0.3f, 0.34f, 1f);
 
-	internal static void ApplyTheme(Color? tint)
+	internal static void ApplyAppearance(string theme, string foreground)
 	{
-		if (!tint.HasValue)
+		if (string.Equals(theme, themeHex, StringComparison.OrdinalIgnoreCase) &&
+			string.Equals(foreground, textHex, StringComparison.OrdinalIgnoreCase))
+			return;
+
+		themeHex = theme;
+		textHex = foreground;
+		HasCustomTheme = TryParseHex(theme, out var tint);
+		WindowTint = HasCustomTheme ? tint : WindowTintDefault;
+		Color linear = WindowTint.linear;
+		float luminance = linear.r * 0.2126f + linear.g * 0.7152f + linear.b * 0.0722f;
+		DarkSurface = luminance < 0.179f;
+
+		if (HasCustomTheme)
+		{
+			Color edge = DarkSurface ? Color.white : new Color(0.06f, 0.09f, 0.13f);
+			Color wash = Color.Lerp(tint, edge, DarkSurface ? 0.17f : 0.08f);
+			GlassTint = wash;
+			Panel = new Color(wash.r, wash.g, wash.b, PanelDefault.a);
+			PanelRaised = new Color(wash.r, wash.g, wash.b, PanelRaisedDefault.a);
+			Accent = Color.Lerp(tint, edge, DarkSurface ? 0.52f : 0.48f);
+			AccentSoft = Color.Lerp(tint, edge, 0.55f);
+			AccentDeep = Color.Lerp(tint, edge, 0.72f);
+			RowHover = new Color(edge.r, edge.g, edge.b, 0.17f);
+		}
+		else
 		{
 			Panel = PanelDefault;
 			PanelRaised = PanelRaisedDefault;
@@ -85,42 +114,19 @@ internal static class UiKit
 			AccentSoft = AccentSoftDefault;
 			AccentDeep = AccentDeepDefault;
 			GlassTint = Color.white;
-			WindowTint = WindowTintDefault;
-			ThemeVersion++;
-			return;
 		}
-		Color value = tint.Value;
-		Color.RGBToHSV(new Color(value.r, value.g, value.b, 1f), out float h, out float s, out float v);
-		Color color = Color.HSVToRGB(h, Mathf.Clamp(Mathf.Max(s, 0.3f), 0.3f, 0.9f), Mathf.Clamp(Mathf.Max(v, 0.5f), 0.5f, 0.95f));
-		Accent = new Color(color.r, color.g, color.b, 1f);
-		AccentSoft = Color.HSVToRGB(h, Mathf.Clamp(Mathf.Max(s, 0.3f) * 0.75f, 0.2f, 0.85f), Mathf.Clamp(v * 0.6f, 0.22f, 0.62f));
-		AccentDeep = Color.HSVToRGB(h, Mathf.Clamp(Mathf.Max(s, 0.3f) * 0.8f, 0.2f, 0.85f), 0.3f);
-		RowHover = new Color(color.r, color.g, color.b, 0.18f);
-		Color color2 = Color.Lerp(Color.white, color, 0.12f);
-		Panel = new Color(color2.r, color2.g, color2.b, 0.22f);
-		PanelRaised = new Color(color2.r, color2.g, color2.b, 0.42f);
-		GlassTint = Color.Lerp(Color.white, color, 0.42f);
-		WindowTint = Color.Lerp(WindowTintDefault, color, 0.55f);
+		Text = DarkSurface ? Color.white : new Color(0.09f, 0.11f, 0.15f);
+		Muted = HasCustomTheme ? Color.Lerp(Text, tint, 0.17f) : new Color(0.32f, 0.37f, 0.44f);
+		Faint = HasCustomTheme ? Color.Lerp(Text, tint, 0.29f) : new Color(0.5f, 0.55f, 0.62f);
+		if (TryParseHex(foreground, out var chosen))
+			Text = Muted = Faint = chosen;
 		ThemeVersion++;
 	}
 
-	internal static void ApplyThemeHex(string hex)
+	internal static void SetTextColor(GUIStyle style, Color color)
 	{
-		string text = hex ?? "";
-		if (string.Equals(text, themeHex, StringComparison.OrdinalIgnoreCase))
-		{
-			return;
-		}
-		themeHex = text;
-		Color color;
-		if (!string.IsNullOrEmpty(text) && TryParseHex(text, out color))
-		{
-			ApplyTheme(color);
-		}
-		else
-		{
-			ApplyTheme(null);
-		}
+		style.normal.textColor = style.hover.textColor = style.active.textColor = style.focused.textColor = color;
+		style.onNormal.textColor = style.onHover.textColor = style.onActive.textColor = style.onFocused.textColor = color;
 	}
 
 	internal static string ToHex(Color color)
@@ -312,24 +318,74 @@ internal static class UiKit
 
 	internal static void Round(Rect rect, Color color, int radius = 8)
 	{
-		if (!(rect.width < 2f) && !(rect.height < 2f))
+		if (Event.current.type != EventType.Repaint || rect.width < 2f || rect.height < 2f || color.a <= 0f)
+			return;
+		Color previous = GUI.color;
+		GUI.color = Color.white;
+		if (HasCustomTheme)
 		{
-			Color color2 = GUI.color;
-			GUI.color = Color.white;
-			GUI.DrawTexture(rect, (Texture)(object)Box(Mathf.RoundToInt(rect.width), Mathf.RoundToInt(rect.height), color, radius), (ScaleMode)0, true);
-			GUI.color = color2;
+			int corner = Mathf.Clamp(radius, 0, Mathf.FloorToInt(Mathf.Min(rect.width, rect.height) * 0.5f));
+			DrawRoundedTint(rect, color, corner);
+			if (corner > 0)
+			{
+				// The neutral reflection is shared by every hue and stretched with fixed-width corners.
+				float reflection = Mathf.Lerp(0.30f, 0.86f, color.grayscale) * Mathf.Clamp01(color.a * 2.5f);
+				GUI.color = new Color(1f, 1f, 1f, reflection);
+				GlassReflection(rect, corner).Draw(rect, GUIContent.none, false, false, false, false);
+			}
 		}
+		else
+		{
+			GUI.DrawTexture(rect, Box(Mathf.RoundToInt(rect.width), Mathf.RoundToInt(rect.height), color, radius), ScaleMode.StretchToFill, true);
+		}
+		GUI.color = previous;
+	}
+
+	private static GUIStyle GlassReflection(Rect rect, int radius)
+	{
+		// On a pill or circle the corners nearly meet, so draw the short axis without a slice seam.
+		int width = rect.width < radius * 3f ? Mathf.RoundToInt(rect.width) : 0;
+		int height = rect.height < radius * 3f ? Mathf.RoundToInt(rect.height) : 0;
+		var key = (radius, width, height);
+		if (glassReflections.TryGetValue(key, out var style))
+			return style;
+
+		int size = radius * 4 + 8;
+		int side = width == 0 ? radius : 0;
+		int cap = height == 0 ? radius : 0;
+		style = new GUIStyle { border = new RectOffset(side, side, cap, cap) };
+		style.normal.background = BuildRounded(width == 0 ? size : width, height == 0 ? size : height,
+			new Color(1f, 1f, 1f, 0f), radius);
+		glassReflections.Add(key, style);
+		return style;
+	}
+
+	private static void DrawRoundedTint(Rect rect, Color color, int radius)
+	{
+		GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 0f, color, 0f, radius);
 	}
 
 	internal static void Shadow(Rect rect, int radius, float strength = 1f)
 	{
-		Round(new Rect(rect.x - 6f, rect.y - 2f, rect.width + 12f, rect.height + 14f), new Color(0.05f, 0.07f, 0.1f, 0.07f * strength), radius + 6);
+		Rect shadow = new Rect(rect.x - 6f, rect.y - 2f, rect.width + 12f, rect.height + 14f);
+		Color color = new Color(0.05f, 0.07f, 0.1f, 0.07f * strength);
+		if (!HasCustomTheme)
+		{
+			Round(shadow, color, radius + 6);
+		}
+		else if (Event.current.type == EventType.Repaint)
+		{
+			Color previous = GUI.color;
+			GUI.color = Color.white;
+			DrawRoundedTint(shadow, color, radius + 6);
+			GUI.color = previous;
+		}
 	}
 
 	internal static void Chip(Rect rect, float alpha, int radius)
 	{
 		Round(new Rect(rect.x - 1.5f, rect.y + 2.5f, rect.width + 3f, rect.height + 3f), new Color(0.06f, 0.09f, 0.13f, 0.10f), radius + 3);
-		Color color = Color.Lerp(GlassTint, Color.white, 0.3f);
+		Color color = Color.Lerp(GlassTint, Color.white, DarkSurface ? 0.13f : 0.3f);
 		Round(new Rect(rect.x - 1f, rect.y - 1f, rect.width + 2f, rect.height + 2f), new Color(color.r, color.g, color.b, Mathf.Clamp01(alpha + 0.16f)), radius + 1);
 		Round(rect, Glass(alpha), radius);
 	}
@@ -341,7 +397,7 @@ internal static class UiKit
 
 	internal static Color GlassLift(float alpha)
 	{
-		Color color = Color.Lerp(GlassTint, Color.white, 0.55f);
+		Color color = Color.Lerp(GlassTint, Color.white, DarkSurface ? 0.09f : 0.55f);
 		return new Color(color.r, color.g, color.b, alpha);
 	}
 
@@ -389,16 +445,12 @@ internal static class UiKit
 		int pillR = Mathf.RoundToInt(rect.height * 0.5f);
 		Chip(rect, active ? 0.60f : (flag ? 0.44f : 0.26f), pillR);
 		Color color = GUI.color;
-		if (!active)
-		{
-			GUI.color = (Color)(flag ? Text : new Color(Muted.r, Muted.g, Muted.b, 0.95f));
-		}
-		else
-		{
-			GUI.color = Text;
-		}
+		Color labelColor = style.normal.textColor;
+		style.normal.textColor = active || flag ? Text : Muted;
+		GUI.color = Color.white;
 		GUI.Label(rect, label, style);
 		GUI.color = color;
+		style.normal.textColor = labelColor;
 		return Click(rect);
 	}
 

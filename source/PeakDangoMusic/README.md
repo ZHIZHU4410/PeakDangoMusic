@@ -1,4 +1,4 @@
-# PeakDangoMusic 2.4.3 插件源码
+# PeakDangoMusic 2.4.7 插件源码
 
 PEAK 游戏内 Muonium 音乐播放器的 BepInEx 插件源码，C# / netstandard2.1。
 界面和玩法看仓库根目录的 README.md，安装看 releases 里的完整安装包。

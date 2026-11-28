@@ -796,19 +796,27 @@ public final class KuGouMusicApi {
     public static List<Track> playlistTracks(String specialId, int limit) {
         List<Track> result = new ArrayList<Track>();
         if (KuGouSign.isBlank(specialId)) return result;
+        int cap = limit > 0 ? limit : MAX_PAGE_SIZE;
         Map<String, String> params = KuGouHttp.params();
         params.put("specialid", specialId.trim());
-        params.put("page", "1");
-        params.put("pagesize", String.valueOf(clampPageSize(limit)));
+        int pageSize = Math.min(cap, MAX_PAGE_SIZE);
+        params.put("pagesize", String.valueOf(pageSize));
         params.put("version", "9108");
         params.put("with_res_tag", "0");
-        JsonObject root = KuGouHttp.get(KuGouHttp.MOBILE_CDN, "/api/v3/special/song", params, KuGouHttp.Sign.NONE);
-        JsonArray info = array(object(root, "data"), "info");
-        if (info == null) return result;
-        for (JsonElement element : info) {
-            if (element == null || !element.isJsonObject()) continue;
-            Track track = parseLegacyTrack(element.getAsJsonObject());
-            if (track != null) result.add(track);
+        var seenPages = new java.util.HashSet<JsonArray>();
+        for (int page = 1; page <= COLLECTION_TRACK_MAX_PAGES; page++) {
+            params.put("page", String.valueOf(page));
+            JsonObject root = KuGouHttp.get(KuGouHttp.MOBILE_CDN, "/api/v3/special/song", params, KuGouHttp.Sign.NONE);
+            JsonArray info = array(object(root, "data"), "info");
+            if (info == null) return null;
+            if (info.isEmpty() || !seenPages.add(info)) break;
+            for (JsonElement element : info) {
+                if (!element.isJsonObject()) continue;
+                Track track = parseLegacyTrack(element.getAsJsonObject());
+                if (track != null) result.add(track);
+                if (result.size() >= cap) return result;
+            }
+            if (info.size() < pageSize) break;
         }
         return result;
     }
@@ -2243,16 +2251,26 @@ public final class KuGouMusicApi {
 
     // ── 账号歌单 ────────────────────────────────────────────────────────────
 
+    public static final class PlaylistLoadException extends RuntimeException {
+        public final boolean needsLogin;
+
+        PlaylistLoadException(String message) {
+            this(message, false);
+        }
+
+        PlaylistLoadException(String message, boolean needsLogin) {
+            super(message);
+            this.needsLogin = needsLogin;
+        }
+    }
+
     /**
-     * 登录用户自己的歌单（创建 + 收藏）。需要 token；未登录返回空列表。
+     * 登录用户自己的歌单（创建 + 收藏）。加载失败通过异常返回，空列表只表示请求成功且没有歌单。
      *
      * <p>{@code listid}（数字）与 {@code global_collection_id} 都要保留：前者用于增删曲与删除歌单，
      * 后者用于取曲目。</p>
      */
     public static List<Playlist> userPlaylists(int limit) {
-        List<Playlist> result = new ArrayList<Playlist>();
-        if (!KuGouDevice.isLoggedIn()) return result;
-
         JsonObject body = new JsonObject();
         body.addProperty("userid", KuGouDevice.userId());
         body.addProperty("token", KuGouDevice.token());
@@ -2262,30 +2280,83 @@ public final class KuGouMusicApi {
         body.addProperty("page", 1);
         body.addProperty("pagesize", clampPageSize(limit));
 
-        Map<String, String> params = KuGouHttp.deviceParams();
-        params.put("plat", "1");
-        JsonObject root = KuGouHttp.postJson(KuGouHttp.GATEWAY, "/v7/get_all_list", params,
-                body.toString(), KuGouHttp.Sign.ANDROID, router("cloudlist.service.kugou.com"));
-        if (!isOk(root)) return result;
+        JsonObject root = requestCloudList("/v7/get_all_list", body, Map.of("plat", "1"));
+        return parseUserPlaylists(root);
+    }
 
-        JsonArray info = array(object(root, "data"), "info");
-        if (info == null) return result;
+    static List<Playlist> parseUserPlaylists(JsonObject root) {
+        JsonObject data = object(root, "data");
+        JsonArray info = array(data, "info");
+        if (info == null) {
+            JsonObject groups = object(data, "info");
+            if (groups == null) groups = data;
+            for (String group : List.of("collect", "love", "self", "list")) {
+                JsonArray playlists = array(groups, group);
+                if (playlists == null) continue;
+                if (info == null) info = new JsonArray();
+                info.addAll(playlists);
+            }
+            JsonArray list = groups == data ? null : array(data, "list");
+            if (list != null) {
+                if (info == null) info = new JsonArray();
+                info.addAll(list);
+            }
+        }
+        if (info == null) throw new PlaylistLoadException("酷狗返回了无法读取的歌单列表，请稍后重试。");
+        List<Playlist> result = new ArrayList<>();
+        var seen = new java.util.HashSet<String>();
         for (JsonElement element : info) {
             if (element == null || !element.isJsonObject()) continue;
             JsonObject item = element.getAsJsonObject();
             Playlist playlist = new Playlist();
-            playlist.listId = text(item, "listid");
+            playlist.listId = firstText(item, "listid", "list_id", "list_create_listid");
             playlist.collectionId = text(item, "global_collection_id");
             playlist.id = KuGouSign.isBlank(playlist.collectionId) ? playlist.listId : playlist.collectionId;
-            playlist.name = firstText(item, "name", "listname", "specialname");
-            playlist.coverTemplate = firstText(item, "pic", "imgurl", "cover", "create_user_pic");
+            playlist.name = firstText(item, "name", "listname", "specialname", "title");
+            playlist.coverTemplate = firstText(item, "pic", "imgurl", "cover", "img", "sizable_cover", "create_user_pic");
             playlist.description = text(item, "intro");
             playlist.creator = text(item, "list_create_username");
-            playlist.trackCount = integer(item, "count", "per_count", "songcount", "musiccount");
-            if (KuGouSign.isBlank(playlist.id) || KuGouSign.isBlank(playlist.name)) continue;
+            playlist.trackCount = integer(item, "count", "per_count", "songcount", "musiccount", "m_count", "song_count");
+            if (KuGouSign.isBlank(playlist.id) || KuGouSign.isBlank(playlist.name) || !seen.add(playlist.id)) continue;
             result.add(playlist);
         }
+        if (result.isEmpty() && !info.isEmpty())
+            throw new PlaylistLoadException("酷狗返回了无法读取的歌单列表，请稍后重试。");
         return result;
+    }
+
+    private static JsonObject requestCloudList(String path, JsonObject body, Map<String, String> extraParams) {
+        if (!KuGouDevice.isLoggedIn())
+            throw new PlaylistLoadException("请先到账号中心扫码登录酷狗音乐。", true);
+        String deviceId = KuGouDevice.cloudDfid();
+        JsonObject root = postCloudList(path, body, extraParams, deviceId);
+        if (cloudListError(root) == 20017 && deviceId.isEmpty()) {
+            deviceId = KuGouDevice.registerCloudDevice();
+            if (!deviceId.isEmpty()) root = postCloudList(path, body, extraParams, deviceId);
+        }
+        if (root == null)
+            throw new PlaylistLoadException("酷狗歌单请求无响应，请检查网络后重试。");
+        if (isOk(root)) return root;
+        int error = cloudListError(root);
+        if (error == 20017)
+            throw new PlaylistLoadException("酷狗拒绝了当前登录。请到账号中心重新扫码（20017）。", true);
+        throw new PlaylistLoadException("酷狗暂时无法读取歌单，请稍后重试（" + error + "）。");
+    }
+
+    private static JsonObject postCloudList(String path, JsonObject body, Map<String, String> extraParams, String deviceId) {
+        var params = KuGouHttp.deviceParams();
+        params.putAll(extraParams);
+        var headers = router("cloudlist.service.kugou.com");
+        if (!deviceId.isEmpty()) {
+            params.put("dfid", deviceId);
+            headers.put("dfid", deviceId);
+        }
+        return KuGouHttp.postJson(KuGouHttp.GATEWAY, path, params, body.toString(),
+                KuGouHttp.Sign.ANDROID, headers);
+    }
+
+    private static int cloudListError(JsonObject root) {
+        return integer(root, "error_code", "errcode");
     }
 
     /**
@@ -2336,9 +2407,7 @@ public final class KuGouMusicApi {
         body.addProperty("allplatform", 1);
         body.addProperty("show_cover", 1);
         body.addProperty("token", KuGouDevice.token());
-        JsonObject root = KuGouHttp.postJson(KuGouHttp.GATEWAY, "/v4/get_list_all_file_v3",
-                KuGouHttp.deviceParams(), body.toString(), KuGouHttp.Sign.ANDROID,
-                router("cloudlist.service.kugou.com"));
+        JsonObject root = requestCloudList("/v4/get_list_all_file_v3", body, Map.of());
         return array(object(root, "data"), "info");
     }
 
@@ -2908,7 +2977,7 @@ public final class KuGouMusicApi {
         params.put("qrcode_txt", "https://h5.kugou.com/apps/loginQRCode/html/index.html?appid="
                 + used.qrTextAppId() + "&");
         params.put("srcappid", KuGouHttp.SRC_APP_ID);
-        JsonObject root = KuGouHttp.get(KuGouHttp.LOGIN_USER, "/v2/qrcode", params, KuGouHttp.Sign.WEB);
+        JsonObject root = requestQr("/v2/qrcode", params);
         if (!isOk(root)) return null;
         JsonObject data = object(root, "data");
         if (data == null) return null;
@@ -2965,8 +3034,8 @@ public final class KuGouMusicApi {
         params.put("srcappid", KuGouHttp.SRC_APP_ID);
         params.put("appid", (profile == null ? KuGouProfile.STANDARD : profile).appId());
         params.put("qrcode", key.trim());
-        params.put("dev", "");
-        JsonObject root = KuGouHttp.get(KuGouHttp.LOGIN_USER, "/v2/get_userinfo_qrcode", params, KuGouHttp.Sign.WEB);
+        params.put("dev", KuGouDevice.dev());
+        JsonObject root = requestQr("/v2/get_userinfo_qrcode", params);
         if (root == null) return null;
         JsonObject data = object(root, "data");
         if (data == null) return null;
@@ -2974,6 +3043,14 @@ public final class KuGouMusicApi {
                 firstText(data, "userid", "user_id"),
                 firstText(data, "nickname", "username", "nickName"),
                 firstText(data, "pic", "avatar", "img"));
+    }
+
+    private static JsonObject requestQr(String path, Map<String, String> params) {
+        String registered = KuGouDevice.cloudDfid();
+        if (registered.isEmpty())
+            return KuGouHttp.get(KuGouHttp.LOGIN_USER, path, params, KuGouHttp.Sign.WEB);
+        params.put("dfid", registered);
+        return KuGouHttp.get(KuGouHttp.LOGIN_USER, path, params, KuGouHttp.Sign.WEB, Map.of("dfid", registered));
     }
 
     /**

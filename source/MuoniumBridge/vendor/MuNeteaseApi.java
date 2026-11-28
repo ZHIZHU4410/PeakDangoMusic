@@ -209,21 +209,61 @@ public final class MuNeteaseApi {
         return out;
     }
 
-    public List<Track> getPlaylistTracks(String playlistId, int limit) {
-        Map<String, String> params = linkedStr("id", playlistId,
-                "n", String.valueOf(limit), "s", "8");
-        JsonObject data = weapi("/weapi/v6/playlist/detail", params);
+    public List<Track> getPlaylistTracks(String playlistId) {
+        final int batchSize = 200;
+        JsonObject data = weapi("/weapi/v6/playlist/detail",
+                linkedStr("id", playlistId, "n", String.valueOf(batchSize), "s", "8"));
         JsonObject playlist = JsonExt.objOrNull(data, "playlist");
-        JsonArray tracks = playlist == null ? null : JsonExt.arrOrNull(playlist, "tracks");
-        List<Track> out = new ArrayList<>();
-        if (tracks == null) return out;
+        if (playlist == null) throw new MusicApiException("网易云：未返回歌单详情", null);
+
+        Map<String, Track> byId = new LinkedHashMap<>();
+        addPlaylistTracks(JsonExt.arrOrNull(playlist, "tracks"), byId);
+        JsonArray ids = JsonExt.arrOrNull(playlist, "trackIds");
+        if (ids == null || ids.isEmpty()) return new ArrayList<>(byId.values());
+
+        // The detail response can omit song metadata while still providing the ordered IDs.
+        List<String> order = new ArrayList<>(ids.size());
+        JsonArray missing = new JsonArray();
+        for (JsonElement entry : ids) {
+            if (!entry.isJsonObject()) continue;
+            String id = textOr(entry.getAsJsonObject(), "id", "");
+            if (!id.matches("[0-9]{1,24}")) continue;
+            order.add(id);
+            if (byId.containsKey(id)) continue;
+            JsonObject item = new JsonObject();
+            item.addProperty("id", id);
+            missing.add(item);
+            if (missing.size() == batchSize) {
+                fetchPlaylistTracks(missing, byId);
+                missing = new JsonArray();
+            }
+        }
+        if (!missing.isEmpty()) fetchPlaylistTracks(missing, byId);
+        List<Track> out = new ArrayList<>(order.size());
+        for (String id : order) {
+            Track track = byId.get(id);
+            if (track != null) out.add(track);
+        }
+        return out;
+    }
+
+    private void fetchPlaylistTracks(JsonArray ids, Map<String, Track> byId) {
+        JsonObject result = weapi("/weapi/v3/song/detail", linkedStr("c", GSON.toJson(ids)));
+        JsonArray songs = JsonExt.arrOrNull(result, "songs");
+        if (songs == null || intOr(result, "code", 200) != 200)
+            throw new MusicApiException("网易云：歌单曲目批次加载失败", null);
+        addPlaylistTracks(songs, byId);
+    }
+
+    private static void addPlaylistTracks(JsonArray tracks, Map<String, Track> byId) {
+        if (tracks == null) return;
         for (JsonElement element : tracks) {
             try {
-                out.add(parseTrack(element.getAsJsonObject()));
+                Track track = parseTrack(element.getAsJsonObject());
+                byId.put(track.getId(), track);
             } catch (Exception ignored) {
             }
         }
-        return out;
     }
 
     public record HeartQueue(String seed, List<Track> tracks, String message) {}

@@ -11,48 +11,44 @@ internal static class QqChart
 {
 	private const int PageSize = 50;
 
-	private static readonly HttpClient http = new HttpClient
-	{
-		Timeout = TimeSpan.FromSeconds(15.0)
-	};
+	private static readonly HttpClient http = CreateClient();
 
-	private static bool started;
-
-	internal static Task<GdMusicApi.Track[]> Load(int topId, int count)
+	internal static Task<GdMusicApi.Track[]> Load(int topId)
 	{
-		return Task.Run(() => Fetch(topId, count));
+		return Task.Run(() => Fetch(topId));
 	}
 
-	private static async Task<GdMusicApi.Track[]> Fetch(int topId, int count)
+	private static HttpClient CreateClient()
 	{
-		if (!started)
-		{
-			started = true;
-			http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36");
-			http.DefaultRequestHeaders.Referrer = new Uri("https://y.qq.com/");
-		}
+		var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+		client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36");
+		client.DefaultRequestHeaders.Referrer = new Uri("https://y.qq.com/");
+		return client;
+	}
+
+	private static async Task<GdMusicApi.Track[]> Fetch(int topId)
+	{
 		List<GdMusicApi.Track> tracks = new List<GdMusicApi.Track>();
+		var seenPages = new HashSet<JToken>(JToken.EqualityComparer);
 		int begin = 0;
-		while (tracks.Count < count && begin < 300)
+		while (begin < 300)
 		{
 			string url = BuildUrl(topId, begin, PageSize);
 			byte[] body = await http.GetByteArrayAsync(url).ConfigureAwait(continueOnCapturedContext: false);
 			JObject root = JObject.Parse(Encoding.UTF8.GetString(body));
 			JArray? list = (JArray?)(object?)root["songlist"];
-			if (list == null || list.Count == 0)
+			if (list == null || list.Count == 0 || !seenPages.Add(list))
 			{
 				break;
 			}
 			Append(list, tracks);
-			begin += PageSize;
+			begin += list.Count;
+			int? total = (int?)root["total_song_num"];
+			if (begin >= total || list.Count < PageSize) break;
 		}
 		if (tracks.Count == 0)
 		{
 			throw new InvalidOperationException("QQ榜单没有返回歌曲");
-		}
-		if (tracks.Count > count)
-		{
-			tracks.RemoveRange(count, tracks.Count - count);
 		}
 		return tracks.ToArray();
 	}

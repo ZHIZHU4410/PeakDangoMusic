@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework><LangVersion>latest</LangVersion>
-    <AssemblyName>PeakDangoMusic</AssemblyName><Version>2.4.3</Version>
+    <AssemblyName>PeakDangoMusic</AssemblyName><Version>2.4.7</Version>
     <RootNamespace></RootNamespace>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -11,6 +11,8 @@
     <GameRoot Condition="'$(GameRoot)'==''">$(MSBuildProjectDirectory)\..\..\..\..</GameRoot>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="AudioProcess\main.cjs" LogicalName="PeakDangoMusic.Audio.main.cjs" />
+    <EmbeddedResource Include="AudioProcess\preload.cjs" LogicalName="PeakDangoMusic.Audio.preload.cjs" />
     <EmbeddedResource Include="PeakDangoMusic.NumericGlyphs.png" LogicalName="PeakDangoMusic.NumericGlyphs.png" />
     <EmbeddedResource Include="PeakDangoMusic\assets\chart_hot.jpg" LogicalName="PeakDangoMusic.chart_hot.jpg" />
     <EmbeddedResource Include="PeakDangoMusic\assets\chart_new.jpg" LogicalName="PeakDangoMusic.chart_new.jpg" />

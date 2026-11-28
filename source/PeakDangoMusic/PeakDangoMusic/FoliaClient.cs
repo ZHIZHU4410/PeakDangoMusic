@@ -74,10 +74,13 @@ internal sealed class FoliaClient : IDisposable
 				2 => "chaotic",
 				_ => "normal",
 			};
-			Primary = (Background ? "#F7E1D7" : ("#" + ColorUtility.ToHtmlStringRGB(palette.Face)));
-			Color accentColor = new Color(palette.Face.r * 0.72f, palette.Face.g * 0.72f, palette.Face.b * 0.72f, 1f);
+			bool customColor = AdaptiveLyrics.LyricTint(out var face);
+			if (!customColor)
+				face = palette.Face;
+			Primary = Background && !customColor ? "#F7E1D7" : "#" + ColorUtility.ToHtmlStringRGB(face);
+			Color accentColor = new Color(face.r * 0.72f, face.g * 0.72f, face.b * 0.72f, 1f);
 			Accent = "#" + ColorUtility.ToHtmlStringRGB(accentColor);
-			if (!Background && palette.IsDark)
+			if (!Background && !customColor && palette.IsDark)
 			{
 				Accent = "#234D59";
 			}

@@ -26,7 +26,9 @@ final class LxAdapter {
    // Catalog metadata uses original native services; only ordinary URL resolution goes to the selected script.
    String channel=text(q,"channel");if(!Set.of("wy","tx","kg","kw","mg").contains(channel))throw new IllegalArgumentException("LX渠道无效");
    if(channel.equals("kw")||channel.equals("mg")){
-    var hits=channel.equals("kw")?KuwoMusicService.search(text(q,"query"),20):MiguMusicService.search(text(q,"query"),20);
+    int page=q.has("page")?q.get("page").getAsInt():1;
+    int limit=PeakMuoniumBridge.SEARCH_PAGE_SIZE;
+    var hits=channel.equals("kw")?KuwoMusicService.search(text(q,"query"),page,limit):MiguMusicService.search(text(q,"query"),page,limit);
     var rows=new JsonArray();if(hits!=null)for(var hit:hits){var row=new JsonObject();row.addProperty("id",channel+":"+Base64.getUrlEncoder().withoutPadding().encodeToString(hit.toString().getBytes(StandardCharsets.UTF_8)));row.addProperty("title",text(hit,"name"));row.addProperty("artist",text(hit,"singer"));row.addProperty("album",text(hit,"albumName"));row.addProperty("cover",text(hit,"img"));row.addProperty("source","lx-native");rows.add(row);}
     out.add("tracks",rows);return out;
    }

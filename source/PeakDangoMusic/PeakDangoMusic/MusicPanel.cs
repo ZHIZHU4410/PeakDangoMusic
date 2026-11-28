@@ -113,6 +113,8 @@ public static class MusicPanel
 		entranceAt = -1f;
 	}
 
+	private static int styleTheme = -1;
+
 	private static void Styles()
 	{
 		if (styleSkin != GUI.skin)
@@ -208,7 +210,24 @@ public static class MusicPanel
 			selectedPresetStyle.hover.background = GUI.skin.button.onHover.background ?? selectedTexture;
 			selectedPresetStyle.normal.textColor = UiKit.Text;
 			selectedPresetStyle.hover.textColor = UiKit.Text;
+			styleTheme = -1;
 		}
+		if (styleTheme == UiKit.ThemeVersion)
+			return;
+		styleTheme = UiKit.ThemeVersion;
+		UiKit.SetTextColor(hint!, UiKit.Text);
+		UiKit.SetTextColor(title!, UiKit.Text);
+		UiKit.SetTextColor(rowLabel!, UiKit.Text);
+		UiKit.SetTextColor(noticeStyle!, UiKit.Text);
+		UiKit.SetTextColor(valueStyle!, UiKit.Text);
+		UiKit.SetTextColor(buttonStyle!, UiKit.Text);
+		UiKit.SetTextColor(presetStyle!, UiKit.Text);
+		UiKit.SetTextColor(selectedStyle!, UiKit.Text);
+		UiKit.SetTextColor(selectedPresetStyle!, UiKit.Text);
+		buttonStyle!.normal.background = presetStyle!.normal.background = GUI.skin.button.normal.background;
+		buttonStyle.hover.background = presetStyle.hover.background = GUI.skin.button.hover.background;
+		selectedStyle!.normal.background = selectedPresetStyle!.normal.background = GUI.skin.button.onNormal.background ?? selectedTexture;
+		selectedStyle.hover.background = selectedPresetStyle.hover.background = GUI.skin.button.onHover.background ?? selectedTexture;
 	}
 
 	public static void Draw()
@@ -636,21 +655,13 @@ public static class MusicPanel
 
 	private static void Tint(Plugin plugin)
 	{
-		MusicSettings settings = plugin.Settings;
 		SectionTitle("歌词字色");
-		GUILayout.Label("调色盘选的色只作用在游戏内悬浮歌词的字上，上面的深/浅字色、昼夜自动切换照旧，选了色就盖过去。光晕颜色设成「随字色」时会跟着一起变。", hint, new GUILayoutOption[2]
+		GUILayout.Label("拖动调色盘或输入色号，悬浮歌词会即时更新。光晕设为「随字色」时会一同更新。", hint, new GUILayoutOption[2]
 		{
 			GUILayout.MinHeight(24f),
 			GUILayout.ExpandHeight(false)
 		});
-		Rect probe = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none, new GUILayoutOption[2]
-		{
-			GUILayout.ExpandWidth(true),
-			GUILayout.Height(1f)
-		});
-		ThemePicker.DrawLyric(plugin, Mathf.Clamp(probe.width, 360f, 1000f));
-		GUILayout.Space(6f);
-		GUILayout.Label(string.IsNullOrEmpty(settings.LyricColor.Value) ? "当前没有自定义，跟着深浅字色走。" : ("当前字色 " + settings.LyricColor.Value + "，改完立刻生效。"), hint, Array.Empty<GUILayoutOption>());
+		ThemePicker.DrawLyric(plugin);
 	}
 
 	private static void Fonts(Plugin plugin)

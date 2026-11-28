@@ -114,8 +114,7 @@ public final class KuGouHttp {
     /**
      * 该端点用哪一套签名。
      *
-     * <p>{@code REGISTER}（设备注册签名）保留了实现但当前没有端点使用：设备注册链路
-     * 在本项目里不可用，见 {@link KuGouDevice} 的类注释。留着是因为它不是错的，只是用不上。</p>
+     * <p>{@code REGISTER} 保留给旧版注册端点。云歌单的 v3 设备注册使用 {@code ANDROID}。</p>
      */
     public enum Sign {
         /** 不加签名（老 mobilecdn / m.kugou.com / lyrics.kugou.com 端点）。 */

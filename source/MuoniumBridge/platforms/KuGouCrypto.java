@@ -14,7 +14,7 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * 酷狗写操作用到的 AES/RSA 组合。
  *
- * <p>只有「删除歌单」一条链路需要它：上游要求请求体是 AES 密文，并在查询串里带一个
+ * <p>删除歌单和注册云歌单设备使用 AES 密文，并在查询串里带一个
  * RSA 加密的密钥信封 {@code p}。其余接口要么明文 JSON，要么只签名。</p>
  *
  * <h3>密钥派生</h3>
@@ -115,6 +115,10 @@ final class KuGouCrypto {
      */
     static String rsaEncrypt(String plain) {
         return rsaEncrypt(plain, PUBLIC_KEY_BASE64);
+    }
+
+    static String rsaEncrypt(String plain, KuGouProfile profile) {
+        return rsaEncrypt(plain, profile == KuGouProfile.CONCEPT ? LITE_PUBLIC_KEY_BASE64 : PUBLIC_KEY_BASE64);
     }
 
     /**
